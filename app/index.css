@@ -79,13 +79,13 @@
   --chart-5: oklch(0.769 0.188 70.08);
   /* The app's charts draw every series in steps of one purple, as the
      Shisho app does: the darkest first in light mode, the brightest first in
-     dark. Steps differ in lightness, not hue, so they hold for color-vision
-     deficiency, and each chart names its series in text beside it, so none
-     relies on telling the shades apart. The Shisho app's asset catalog
+     dark. Each step is at least 3:1 against its theme's surface, and steps
+     differ in lightness, not hue, so they hold for color-vision deficiency;
+     each chart also names its series in text beside it. The Shisho app's asset catalog
      holds the same colors, which app/utils/appParity.test.ts checks. */
-  --chart-purple-1: oklch(0.55 0.2 280);
-  --chart-purple-2: oklch(0.69 0.13 280);
-  --chart-purple-3: oklch(0.82 0.07 280);
+  --chart-purple-1: oklch(0.48 0.2 280);
+  --chart-purple-2: oklch(0.58 0.17 280);
+  --chart-purple-3: oklch(0.66 0.13 280);
   /* Server Stats' disk segments, in order along the bar. */
   --disk-library: var(--chart-purple-1);
   --disk-database: var(--chart-purple-2);
@@ -129,9 +129,9 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --chart-purple-1: oklch(0.66 0.17 280);
-  --chart-purple-2: oklch(0.5 0.12 280);
-  --chart-purple-3: oklch(0.38 0.08 280);
+  --chart-purple-1: oklch(0.8 0.11 280);
+  --chart-purple-2: oklch(0.7 0.15 280);
+  --chart-purple-3: oklch(0.6 0.17 280);
   --sidebar: oklch(0.13 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.8 0.15 280);

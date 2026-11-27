@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 
 // Reading Stats is drawn twice, by the web app and by the Shisho app, and
 // the two should say and look the same. These read both sides' sources and
-// fail when one gains, loses, or rewords a card, tile, or note the other
-// doesn't, or when the app's chart colors drift from the web's.
+// fail when one gains, loses, or rewords an Overview card, tile, or note the
+// other doesn't, or when the app's chart or calendar colors drift from the
+// web's. The Calendar tab's words aren't compared: a phone lays it out
+// differently, with words of its own.
 
 const read = (path: string) =>
   readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
@@ -20,7 +22,7 @@ const squash = (text: string) => text.replace(/\s+/g, " ").trim();
 
 const between = (source: string, start: string, end: string) => {
   const from = source.indexOf(start);
-  const to = source.indexOf(end, from);
+  const to = source.indexOf(end, from + start.length);
   if (from < 0 || to < 0) {
     throw new Error(`can't find ${start} … ${end}`);
   }
@@ -37,10 +39,11 @@ const all = (source: string, pattern: RegExp) =>
 const webStrings = () => {
   const body = between(webPage, "const StatsBody", "const FINISHED_PER_PAGE");
   return [
-    ...all(body, /label="([^"]+)"/g),
-    ...all(body, /title="([^"]+)"/g),
+    // Plain or in braces: label="Kind" and label={"Kind"} alike.
+    ...all(body, /label=\{?"([^"]+)"/g),
+    ...all(body, /title=\{?"([^"]+)"/g),
     ...all(body, /title=\{\s*byYear\s*\?\s*"([^"]+)"\s*:\s*"([^"]+)"\s*\}/g),
-    ...all(body, /emptyMessage="([^"]+)"/g),
+    ...all(body, /emptyMessage=\{?"([^"]+)"/g),
     ...all(webSections, /<EmptyNote>([^<{]+)<\/EmptyNote>/g),
     ...all(
       between(webSections, "export const PaceList", "export const PlaceList"),
@@ -146,6 +149,30 @@ const assetColor = (name: string, dark: boolean) => {
 };
 
 describe("the Shisho app's chart colors", () => {
+  it("draw reading and listening in the same steps as the web", () => {
+    // Each side's own mapping, so neither can repoint a series alone.
+    const light = between(css, ":root {", "}");
+    expect(light).toMatch(/--reading:\s*var\(--chart-purple-1\)/);
+    expect(light).toMatch(/--listening:\s*var\(--chart-purple-2\)/);
+    expect(between(css, ".dark {", "}")).not.toMatch(/--(reading|listening):/);
+    expect(appStats).toMatch(/static let reading = Color\("ChartPurple1"\)/);
+    expect(appStats).toMatch(/static let listening = Color\("ChartPurple2"\)/);
+  });
+
+  it("give the calendar's Books the web's colors, in its order", () => {
+    const hexes = (source: string, start: string) =>
+      [...between(source, start, "]").matchAll(/"(#[0-9a-fA-F]{6})"/g)].map(
+        (m) => m[1].toLowerCase(),
+      );
+    const web = hexes(read("./readingCalendar.ts"), "export const BOOK_COLORS");
+    const app = hexes(
+      read("../../mobile/ios/Shisho/UI/ReadingCalendarLayout.swift"),
+      "static let bookColors: [String] = [",
+    );
+    expect(web.length).toBeGreaterThan(0);
+    expect(app).toEqual(web);
+  });
+
   const light = between(css, ":root {", "}");
   const dark = between(css, ".dark {", "}");
 

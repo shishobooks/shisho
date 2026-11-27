@@ -777,10 +777,32 @@ describe("ReadingStatsPage", () => {
       name: "Where you read",
     });
     const rows = within(places).getAllByRole("listitem");
+    // Each place's share of all the time, so the two make a whole.
     expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringMatching(/^Shisho web reader1h 0m reading/),
-      expect.stringMatching(/^Shisho web player20m listening/),
+      expect.stringMatching(/^Shisho web reader1h 0m reading · 75%/),
+      expect.stringMatching(/^Shisho web player20m listening · 25%/),
     ]);
+  });
+
+  it("measures each breakdown row against the books finished", async () => {
+    renderPage({
+      stats: (year) => ({
+        ...busyStats(year),
+        totals: { ...busyStats(year).totals, finished_books: 3 },
+        genres: [
+          { name: "Mystery", books: 2 },
+          { name: "Fantasy", books: 1 },
+        ],
+      }),
+    });
+    const genres = await screen.findByRole("region", { name: "Genres" });
+    // Two mysteries of three books is two thirds, not the whole of the
+    // biggest row.
+    expect(
+      within(genres)
+        .getAllByRole("button", { pressed: false })
+        .map((row) => row.textContent),
+    ).toEqual(["Mystery2 books · 67%", "Fantasy1 book · 33%"]);
   });
 
   describe("heatmap and calendar", () => {
