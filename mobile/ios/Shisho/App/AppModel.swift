@@ -90,6 +90,10 @@ final class AppModel {
     private(set) var player: AudioPlayer?
     /// Now Playing is open.
     var showingPlayer = false
+    /// A keyboard is up, whatever its height, with or without the bar of
+    /// next, previous, and Done above it: the mini player sits on it rather
+    /// than above the tab bar it covers (MainTabs).
+    var keyboardShowing = false
     /// The ebook open in the reader, which records reading whatever the
     /// screen does, as the player records listening.
     private(set) var reader: OpenReader?

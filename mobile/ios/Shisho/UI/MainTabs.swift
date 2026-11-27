@@ -40,6 +40,12 @@ struct MainTabs: View {
         // screens still make room for the keyboard themselves.
         .ignoresSafeArea(.keyboard)
         .tint(Theme.primary)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.25)) { model.keyboardShowing = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.25)) { model.keyboardShowing = false }
+        }
         .sheet(isPresented: Binding(get: { model.showingAccount }, set: { model.showingAccount = $0 })) {
             AccountSheet()
         }
@@ -362,16 +368,14 @@ private struct MiniPlayerOverlay: ViewModifier {
     @Environment(AppModel.self) private var model
 
     func body(content: Content) -> some View {
-        // Above the tab bar, and like it, staying put under the keyboard.
-        content.overlay {
-            Color.clear
-                .ignoresSafeArea(.keyboard)
-                .overlay(alignment: .bottom) {
-                    MiniPlayer()
-                        .frame(maxWidth: 680)
-                        .padding(.bottom, AppTabBar.room(model.connection))
-                        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
-                }
+        // Above the tab bar, or with a keyboard up, which covers the bar,
+        // just above the keyboard: the screen's room ends at the keyboard's
+        // top, whatever it holds, so the bar's room would leave a gap.
+        content.overlay(alignment: .bottom) {
+            MiniPlayer()
+                .frame(maxWidth: 680)
+                .padding(.bottom, model.keyboardShowing ? 8 : AppTabBar.room(model.connection))
+                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
         }
     }
 }

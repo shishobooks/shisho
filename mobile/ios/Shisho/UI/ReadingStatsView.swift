@@ -30,6 +30,7 @@ struct ReadingStatsView: View {
     private var calendar: Bool { tab == .calendar && model.offers(.readingCalendar) }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if model.offers(.readingCalendar) {
@@ -57,6 +58,10 @@ struct ReadingStatsView: View {
             .padding(.bottom, 32)
             .frame(maxWidth: 900)
             .frame(maxWidth: .infinity)
+        }
+        .environment(\.revealCard) { id in
+            withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .top) }
+        }
         }
         .miniPlayerClearance()
         .background(Theme.background)
@@ -221,6 +226,12 @@ struct ReadingStatsView: View {
                       emptyMessage: String(localized: "No finished books are rated."), identifier: "stats.ratings")
         }
     }
+}
+
+extension EnvironmentValues {
+    /// Scrolls Reading Stats so the view with id shows from its top, as a
+    /// breakdown's search does to show its matches above the keyboard.
+    @Entry var revealCard: ((String) -> Void)?
 }
 
 /// The steps of purple every chart and bar is drawn in, the web's
@@ -894,6 +905,8 @@ private struct CountList: View {
     let emptyMessage: String
     let identifier: String
 
+    @Environment(\.revealCard) private var revealCard
+    @FocusState private var searching: Bool
     @State private var expanded = false
     @State private var search = ""
     /// The list's height with its first few rows, which it keeps expanded,
@@ -921,6 +934,7 @@ private struct CountList: View {
                         .padding(.horizontal, 10)
                         .frame(minHeight: 34)
                         .background(Theme.secondary, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+                        .focused($searching)
                         .accessibilityIdentifier("\(identifier).search")
                     ScrollView {
                         list
@@ -948,6 +962,17 @@ private struct CountList: View {
             .frame(height: expanded ? collapsedHeight : nil, alignment: .top)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                 if !expanded { collapsedHeight = height }
+            }
+            .id(identifier)
+            // Typing in the search, the whole list shows, not only the
+            // field the keyboard makes room for: the matches are under it.
+            .onChange(of: searching) { _, searching in
+                guard searching else { return }
+                Task {
+                    // After the keyboard's own scrolling, which would undo it.
+                    try? await Task.sleep(for: .milliseconds(350))
+                    revealCard?(identifier)
+                }
             }
         }
     }

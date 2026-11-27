@@ -137,7 +137,10 @@ struct MiniPlayer: View {
 
 extension View {
     /// Room at the end of a scroll view for the mini player while it shows,
-    /// so the last of the content can scroll clear of it.
+    /// so the last of the content can scroll clear of it. With a keyboard up,
+    /// the mini player sits on the keyboard, so the room is part of the
+    /// screen's safe area instead, and a field being typed in scrolls clear
+    /// of it too.
     func miniPlayerClearance() -> some View {
         modifier(MiniPlayerClearance())
     }
@@ -152,6 +155,9 @@ private struct MiniPlayerClearance: ViewModifier {
         // The bar's height at the largest size it grows to, and its margin,
         // over the tab bar.
         let room: CGFloat = dynamicTypeSize >= .xxLarge ? 96 : 80
-        content.contentMargins(.bottom, (showing ? room : 0) + AppTabBar.room(model.connection), for: .scrollContent)
+        let typing = model.keyboardShowing
+        content
+            .contentMargins(.bottom, typing ? 0 : (showing ? room : 0) + AppTabBar.room(model.connection), for: .scrollContent)
+            .safeAreaPadding(.bottom, typing && showing ? room : 0)
     }
 }
