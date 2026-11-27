@@ -87,6 +87,7 @@ Do not restore only `shisho.db` from a live filesystem copy, and do not use a re
 4. Select an application version compatible with the restored database.
 5. Start Shisho and inspect migration and startup logs.
 6. Verify login, libraries, and representative files before removing the previous state.
+7. Ask anyone using the [Shisho app](./shisho-app.md#setting-up-a-server-again) to sign out of it and sign in again, so it downloads the restored libraries.
 
 ## Health Checks
 
