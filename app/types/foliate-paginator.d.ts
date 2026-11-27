@@ -6,4 +6,6 @@ declare module "@/libraries/foliate/paginator.js" {
     // A Shisho patch: the page going to an element or range would show.
     pageOf(anchor: Element | Range): number | null;
   }
+  // A Shisho patch: clears forced breaks before a section's first content.
+  export function clearLeadingBreaks(doc: Document): void;
 }
