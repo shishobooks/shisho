@@ -155,10 +155,19 @@ func loadLibraries(ctx context.Context, tx bun.IDB, userID int, ids []int) (map[
 	for _, library := range libraries {
 		out[library.ID] = &FeedLibrary{
 			ID: library.ID, Name: library.Name, CoverAspectRatio: library.CoverAspectRatio,
-			SortSpec: sorts[library.ID],
+			SortSpec: sorts[library.ID], TagNamespaces: tagNamespaces(library),
 		}
 	}
 	return out, nil
+}
+
+// tagNamespaces is a Library's tag namespaces, never nil, so the app
+// always gets a list.
+func tagNamespaces(library *models.Library) []string {
+	if library.TagNamespaces == nil {
+		return []string{}
+	}
+	return []string(library.TagNamespaces)
 }
 
 func loadBooks(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedBook, error) {

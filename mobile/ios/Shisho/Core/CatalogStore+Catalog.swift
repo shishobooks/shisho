@@ -6,6 +6,11 @@ import ShishoAPI
 struct ResourceSummary: Identifiable, Hashable, Sendable {
     let id: Int
     let name: String
+    /// A Tag's namespace in its Library (`TagNamespaces`), or nil.
+    var namespace: String?
+    /// The name to show: a namespaced Tag's without its prefix.
+    var shownName: String { shownNameOverride ?? name }
+    var shownNameOverride: String?
     /// How many of the device's Books name it.
     let bookCount: Int
     /// The line under the name, as the web app's lists show it: a Person's
@@ -42,6 +47,11 @@ struct ResourceDetail: Hashable, Sendable {
     let aliases: [String]
     /// A Person's narrated Files, which the web counts rather than Books.
     var narratedFiles = 0
+    /// A Tag's namespace in its Library (`TagNamespaces`), or nil.
+    var namespace: String?
+    /// The name to show: a namespaced Tag's without its prefix.
+    var shownName: String { shownNameOverride ?? name }
+    var shownNameOverride: String?
 }
 
 /// A List as the Lists tab shows it.
@@ -124,6 +134,8 @@ extension CatalogStore {
             t.column("name", .text).notNull()
             t.column("cover_aspect_ratio", .text).notNull()
             t.column("sort_spec", .text).notNull().defaults(to: "")
+            // The tag name prefixes it groups tags by, as JSON.
+            t.column("tag_namespaces", .text).notNull().defaults(to: "[]")
             t.column("generation", .integer).notNull()
         }
         try db.create(table: "books") { t in
@@ -690,7 +702,7 @@ extension CatalogStore {
             books = "SELECT tag_id AS rid, book_id, 0 AS ord FROM book_tags"
         }
         var sql = """
-            SELECT r.id, r.name, r.sort_name, r.aliases,
+            SELECT r.id, r.library_id, r.name, r.sort_name, r.aliases,
                 (SELECT COUNT(DISTINCT j.book_id) FROM (\(books)) j WHERE j.rid = r.id) AS book_count,
                 \(kind == .person ? "(SELECT COUNT(DISTINCT book_id) FROM book_authors WHERE person_id = r.id)" : "0") AS authored,
                 \(kind == .person ? "(SELECT COUNT(DISTINCT file_id) FROM book_narrators WHERE person_id = r.id)" : "0") AS narrated
@@ -709,13 +721,20 @@ extension CatalogStore {
             sql += " WHERE " + conditions.joined(separator: " AND ")
         }
         sql += " ORDER BY r.sort_name COLLATE NOCASE, r.id"
+        let namespaces = kind == .tag ? try tagNamespacesByLibrary(db) : [:]
         var items = try Row.fetchAll(db, sql: sql, arguments: arguments).map { row -> ResourceSummary in
             let name: String = row["name"]
             let sortName: String = row["sort_name"]
             var parts = kind == .person && sortName != name ? [sortName] : []
             parts += names(row["aliases"])
-            return ResourceSummary(id: row["id"], name: name, bookCount: row["book_count"], detail: parts.joined(separator: ", "),
-                                   authoredCount: row["authored"], narratedCount: row["narrated"])
+            var item = ResourceSummary(id: row["id"], name: name, bookCount: row["book_count"], detail: parts.joined(separator: ", "),
+                                       authoredCount: row["authored"], narratedCount: row["narrated"])
+            if kind == .tag {
+                let split = TagNamespaces.split(name, namespaces[row["library_id"]] ?? [])
+                item.namespace = split.namespace
+                item.shownNameOverride = split.namespace == nil ? nil : split.name
+            }
+            return item
         }
         // A resource no Book names yet, before its Books arrive, isn't
         // worth a row.
@@ -748,14 +767,21 @@ extension CatalogStore {
     }
 
     static func resource(_ db: Database, kind: ResourceKind, id: Int) throws -> ResourceDetail? {
-        guard let row = try Row.fetchOne(db, sql: "SELECT name, description, aliases FROM \(kind.table) WHERE id = ?", arguments: [id]) else {
+        guard let row = try Row.fetchOne(db, sql: "SELECT library_id, name, description, aliases FROM \(kind.table) WHERE id = ?",
+                                         arguments: [id]) else {
             return nil
         }
         let narrated = kind == .person
             ? try Int.fetchOne(db, sql: "SELECT COUNT(DISTINCT file_id) FROM book_narrators WHERE person_id = ?", arguments: [id]) ?? 0
             : 0
-        return ResourceDetail(kind: kind, id: id, name: row["name"], description: row["description"], aliases: names(row["aliases"]),
-                              narratedFiles: narrated)
+        var detail = ResourceDetail(kind: kind, id: id, name: row["name"], description: row["description"], aliases: names(row["aliases"]),
+                                    narratedFiles: narrated)
+        if kind == .tag {
+            let split = TagNamespaces.split(detail.name, try tagNamespaces(db, libraryID: row["library_id"]))
+            detail.namespace = split.namespace
+            detail.shownNameOverride = split.namespace == nil ? nil : split.name
+        }
+        return detail
     }
 
     /// The Books naming a resource: a Series' in its order, a Person's

@@ -92,7 +92,6 @@ var columnsNotCompared = map[string]string{
 	"libraries.created_at":              reasonBookkeep,
 	"libraries.updated_at":              reasonBookkeep,
 	"libraries.organize_file_structure": "a server-side setting",
-	"libraries.tag_namespaces":          reasonNotYet,
 
 	"books.id":                 reasonPrimaryKey,
 	"books.updated_at":         reasonBookkeep,

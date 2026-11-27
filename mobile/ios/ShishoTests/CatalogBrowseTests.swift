@@ -61,6 +61,45 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(detail.files.first?.narratorIDs, [2])
     }
 
+    /// A Library with tag namespaces, as the web shows them (metadata.md,
+    /// Tag Namespaces): each tag split by its own Library's namespaces.
+    func testTagNamespacesSplitTagsByTheirLibrary() throws {
+        let doujin = #"{"kind":"library","id":2,"library_id":2,"library":{"id":2,"name":"Doujin","cover_aspect_ratio":"book","tag_namespaces":["Circle","Magazine"]}}"#
+        let tags = """
+            {"kind":"tag","id":2,"library_id":2,"tag":{"id":2,"library_id":2,"name":"Circle: Moon Factory","aliases":[]}},
+            {"kind":"tag","id":3,"library_id":2,"tag":{"id":3,"library_id":2,"name":"Full Color","aliases":[]}},
+            {"kind":"tag","id":4,"library_id":1,"tag":{"id":4,"library_id":1,"name":"Circle: Not Here","aliases":[]}}
+            """
+        // Each Book's own tags in place of the fixture's.
+        let desert = #""tags":[{"tag_id":1,"name":"Desert"}]"#
+        let tagged = book(3, "Bloom", library: 2)
+            .replacingOccurrences(of: desert, with: #""tags":[{"tag_id":3,"name":"Full Color"},{"tag_id":2,"name":"Circle: Moon Factory"}]"#)
+        let other = book(4, "Other").replacingOccurrences(of: desert, with: #""tags":[{"tag_id":4,"name":"Circle: Not Here"}]"#)
+        try store.apply(page(#"{"entries":[\#(library(1, "Fiction")),\#(doujin),\#(book(1, "Dune")),\#(tagged),\#(other),\#(resources),\#(tags)],"cursor":9}"#))
+
+        XCTAssertEqual(try store.pool.read { try CatalogStore.tagNamespaces($0, libraryID: 2) }, ["Circle", "Magazine"])
+        XCTAssertEqual(try store.pool.read { try CatalogStore.tagNamespaces($0, libraryID: 1) }, [])
+        XCTAssertEqual(try store.pool.read { try CatalogStore.tagNamespaces($0, libraryID: nil) }, ["Circle", "Magazine"],
+                       "every Library's, for every Library at once")
+
+        let listed = try store.pool.read { try CatalogStore.resources($0, kind: .tag, libraryID: nil) }
+        let byID = Dictionary(uniqueKeysWithValues: listed.map { ($0.id, $0) })
+        XCTAssertEqual(byID[2]?.namespace, "Circle")
+        XCTAssertEqual(byID[2]?.shownName, "Moon Factory")
+        XCTAssertNil(byID[4]?.namespace, "Fiction has no Circle namespace")
+        XCTAssertEqual(byID[4]?.shownName, "Circle: Not Here")
+
+        let detail = try XCTUnwrap(store.pool.read { try CatalogStore.resource($0, kind: .tag, id: 2) })
+        XCTAssertEqual(detail.namespace, "Circle")
+        XCTAssertEqual(detail.shownName, "Moon Factory")
+        XCTAssertEqual(try store.pool.read { try CatalogStore.book($0, id: 3) }?.tagNamespaces, ["Circle", "Magazine"])
+        XCTAssertEqual(try store.pool.read { try CatalogStore.filterOptions($0, libraryID: 2) }.tagNamespaces, ["Circle", "Magazine"])
+
+        // A Library sent again with its namespaces changed.
+        try store.apply(page(#"{"entries":[{"kind":"library","id":2,"library_id":2,"library":{"id":2,"name":"Doujin","cover_aspect_ratio":"book","tag_namespaces":[]}}],"cursor":10}"#))
+        XCTAssertNil(try store.pool.read { try CatalogStore.resource($0, kind: .tag, id: 2) }?.namespace)
+    }
+
     func testBrowsesResources() throws {
         try catalog()
         let series = try store.pool.read { try CatalogStore.resources($0, kind: .series, libraryID: nil) }

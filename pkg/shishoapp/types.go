@@ -180,6 +180,9 @@ type FeedLibrary struct {
 	// for the default, newest first. A field the app doesn't know is
 	// skipped.
 	SortSpec string `json:"sort_spec"`
+	// TagNamespaces are the tag name prefixes the Library groups tags by, in
+	// its order, as the web shows them (models.Library.TagNamespaces).
+	TagNamespaces []string `json:"tag_namespaces"`
 }
 
 // FeedBook is a Book as the app keeps it.

@@ -13,6 +13,11 @@ enum Counts {
     static func books(_ count: Int) -> String {
         String(AttributedString(localized: "^[\(count) book](inflect: true)").characters)
     }
+
+    /// "3 tags".
+    static func tags(_ count: Int) -> String {
+        String(AttributedString(localized: "^[\(count) tag](inflect: true)").characters)
+    }
 }
 
 /// Ratings, kept in quarter-star units, as the web app words them.

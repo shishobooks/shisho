@@ -253,7 +253,7 @@ func init() {
 		// Library: its name and cover aspect ratio. The ratio decides which
 		// File's cover each of its Books shows, so it moves them too.
 		trigger("libraries_insert", "INSERT", "libraries", "", record("library", "NEW.id", "NEW.id", false)),
-		trigger("libraries_update", "UPDATE", "libraries", differs("name", "cover_aspect_ratio"), record("library", "NEW.id", "NEW.id", false)),
+		trigger("libraries_update", "UPDATE", "libraries", differs("name", "cover_aspect_ratio", "tag_namespaces"), record("library", "NEW.id", "NEW.id", false)),
 		trigger("libraries_update_covers", "UPDATE", "libraries", differs("cover_aspect_ratio"), moveBooks("SELECT id FROM books WHERE library_id = NEW.id")),
 		trigger("libraries_delete", "DELETE", "libraries", "", record("library", "OLD.id", "OLD.id", true)),
 
@@ -416,6 +416,17 @@ func init() {
 
 	up := func(ctx context.Context, db *bun.DB) error {
 		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			// Bun records a migration after it commits, so a server stopped
+			// between the two runs it again on its next start. It's all one
+			// transaction, so the change log being there means it all ran.
+			var n int
+			err := tx.NewRaw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'change_log_entries'").Scan(ctx, &n)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			if n > 0 {
+				return nil
+			}
 			return run(ctx, tx, statements...)
 		})
 	}

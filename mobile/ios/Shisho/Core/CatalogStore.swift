@@ -90,6 +90,8 @@ struct BookDetail: Hashable, Sendable {
     var tags: [Named] = []
     /// When its newest File with a release date was released.
     var published: Date?
+    /// Its Library's tag namespaces, which group its tags.
+    var tagNamespaces: [String] = []
 }
 
 struct LibrarySummary: Identifiable, Hashable, Sendable {
@@ -301,12 +303,13 @@ final class CatalogStore: Sendable {
             } else if let library = entry.library {
                 try db.execute(
                     sql: """
-                    INSERT INTO libraries (id, name, cover_aspect_ratio, sort_spec, generation) VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO libraries (id, name, cover_aspect_ratio, sort_spec, tag_namespaces, generation) VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT (id) DO UPDATE SET name = excluded.name,
                         cover_aspect_ratio = excluded.cover_aspect_ratio, sort_spec = excluded.sort_spec,
-                        generation = excluded.generation
+                        tag_namespaces = excluded.tag_namespaces, generation = excluded.generation
                     """,
-                    arguments: [library.id, library.name, library.coverAspectRatio.rawValue, library.sortSpec, generation]
+                    arguments: [library.id, library.name, library.coverAspectRatio.rawValue, library.sortSpec,
+                                CatalogStore.namesJSON(library.tagNamespaces), generation]
                 )
             }
         case .readingPosition:
@@ -460,6 +463,23 @@ final class CatalogStore: Sendable {
     // Each read is a static function of a Database, so a screen can observe
     // it (ValueObservation) and update whenever a sync changes what it read.
 
+    /// A Library's tag namespaces, in its order, or for every Library at
+    /// once, each namespace any of them lists, once (`TagNamespaces.merged`).
+    static func tagNamespaces(_ db: Database, libraryID: Int?) throws -> [String] {
+        if let libraryID {
+            return names(try String.fetchOne(db, sql: "SELECT tag_namespaces FROM libraries WHERE id = ?", arguments: [libraryID]))
+        }
+        return TagNamespaces.merged(try String.fetchAll(db, sql: "SELECT tag_namespaces FROM libraries ORDER BY name COLLATE NOCASE, id")
+            .map { names($0) })
+    }
+
+    /// Every Library's tag namespaces, by Library.
+    static func tagNamespacesByLibrary(_ db: Database) throws -> [Int: [String]] {
+        Dictionary(uniqueKeysWithValues: try Row.fetchAll(db, sql: "SELECT id, tag_namespaces FROM libraries").map {
+            ($0["id"] as Int, names($0["tag_namespaces"]))
+        })
+    }
+
     static func libraries(_ db: Database) throws -> [LibrarySummary] {
         try Row.fetchAll(db, sql: "SELECT id, name FROM libraries ORDER BY name COLLATE NOCASE").map {
             LibrarySummary(id: $0["id"], name: $0["name"])
@@ -549,7 +569,8 @@ final class CatalogStore: Sendable {
             SELECT release_date FROM book_files WHERE book_id = ? AND release_date IS NOT NULL ORDER BY id DESC LIMIT 1
             """, arguments: [id]).map { Date(timeIntervalSince1970: $0) }
         return BookDetail(summary: summary(row, fileTypes: fileTypes), subtitle: row["subtitle"], authors: authors, series: series,
-                          files: files, description: row["description"], genres: genres, tags: tags, published: published)
+                          files: files, description: row["description"], genres: genres, tags: tags, published: published,
+                          tagNamespaces: try tagNamespaces(db, libraryID: row["library_id"]))
     }
 
     /// Each Book's main File Types, in order, each once.

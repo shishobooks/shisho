@@ -37,6 +37,8 @@ struct FilterOptions: Hashable, Sendable {
     var genres: [FilterOption] = []
     var tags: [FilterOption] = []
     var languages: [String] = []
+    /// The tag namespaces the tag picker can narrow to.
+    var tagNamespaces: [String] = []
 }
 
 extension CatalogStore {
@@ -127,7 +129,8 @@ extension CatalogStore {
             tags: try counted("book_tags", books: books, in: db),
             languages: languageOptions(try String.fetchAll(db, sql: """
                 SELECT DISTINCT language FROM book_files WHERE language IS NOT NULL AND book_id IN (\(books)) ORDER BY language
-                """))
+                """)),
+            tagNamespaces: try tagNamespaces(db, libraryID: libraryID)
         )
     }
 

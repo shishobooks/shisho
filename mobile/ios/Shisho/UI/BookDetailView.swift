@@ -282,9 +282,11 @@ struct BookDetailView: View {
                 (Route.resource(.genre, id: $0.id, name: $0.name), $0.name)
             }, identifier: "book.detail.genre"))))
         }
-        if !book.tags.isEmpty {
-            rows.append(InfoRow(label: String(localized: "Tags"), value: AnyView(LinkChips(items: book.tags.map {
-                (Route.resource(.tag, id: $0.id, name: $0.name), $0.name)
+        // Plain tags under Tags, then a row for each tag namespace, in the
+        // Library's order, as the web's Book page lists them.
+        for group in TagNamespaces.group(book.tags, name: \.name, namespaces: book.tagNamespaces) {
+            rows.append(InfoRow(label: group.namespace ?? String(localized: "Tags"), value: AnyView(LinkChips(items: group.tags.map {
+                (Route.resource(.tag, id: $0.tag.id, name: $0.tag.name), $0.name)
             }, identifier: "book.detail.tag"))))
         }
         if let published = book.published {
