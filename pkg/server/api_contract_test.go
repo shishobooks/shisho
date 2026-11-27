@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -122,6 +123,11 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, "/api/user/devices", `{"name":"Kindle","device_type":"kindle"}`, http.StatusCreated)), &kindle))
 	appDevice, err := devices.NewService(f.db).CreateAppDevice(f.ctx, f.admin.ID, devices.AppDeviceOptions{Name: "iPhone", InstallationID: "i", AppVersion: "1.0.0"})
 	require.NoError(t, err)
+	// The headers the Shisho app sends on every /mobile request.
+	appHeaders := map[string]string{
+		echo.HeaderAuthorization:    "Bearer " + appDevice.Credential,
+		shishoapp.HeaderAppProtocol: strconv.Itoa(shishoapp.Protocol),
+	}
 	var koreader struct {
 		ID string `json:"id"`
 	}
@@ -247,6 +253,18 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		{
 			name:   "a Reading Stats day that isn't on the calendar",
 			method: http.MethodGet, path: "/api/reading/stats/day?day=2026-02-30",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `"day" should be a calendar day as YYYY-MM-DD`,
+		},
+		{
+			name:   "a Shisho app calendar month that can't exist",
+			method: http.MethodGet, path: "/mobile/stats/calendar?year=2026&month=13",
+			header: appHeaders,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `"month" must be less than or equal to 12`,
+		},
+		{
+			name:   "a Shisho app calendar day that isn't on the calendar",
+			method: http.MethodGet, path: "/mobile/stats/day?day=2026-02-30",
+			header: appHeaders,
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: `"day" should be a calendar day as YYYY-MM-DD`,
 		},
 		{

@@ -92,6 +92,9 @@ type RemoveBooksPayload struct {
 
 type ReorderBooksPayload struct {
 	BookIDs []int `json:"book_ids" validate:"required,min=1,max=500,dive,min=1"`
+	// MovedBookID is the Book the user dragged, which orders the Shisho
+	// app's late moves against this one (ADR 0024).
+	MovedBookID *int `json:"moved_book_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 }
 
 type CreateSharePayload struct {

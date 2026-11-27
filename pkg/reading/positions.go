@@ -288,7 +288,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			// Reported finished before Shisho saw it begin, as a book read on
 			// the device first: a finished read with no begin day, like Mark as
 			// read with nothing underway, which leaves the other Files' places.
-			finished, err := insertFinishedReadThrough(ctx, tx, u.UserID, bookID, day, now)
+			finished, err := insertFinishedReadThrough(ctx, tx, u.UserID, bookID, day, now, occurredAt)
 			if err != nil {
 				return err
 			}
@@ -297,7 +297,9 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			underway = finished
 			finishing = false
 		case starting:
-			underway, err = startReadThrough(ctx, tx, u.UserID, bookID, beginDay, now, u.FileID)
+			// Dated when the reading began, not when it arrived, so a choice
+			// the Shisho app made offline after it orders after it (ADR 0024).
+			underway, err = startReadThrough(ctx, tx, u.UserID, bookID, beginDay, now, listeningSince, u.FileID)
 			if err != nil {
 				return err
 			}
@@ -307,10 +309,11 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			result.Started = true
 		// Reading from before the pause, sent late as a device's offline
 		// queue does, saves the place but doesn't undo the pause.
-		case underway != nil && underway.Paused && progress && !finishing && !occurredAt.Before(underway.UpdatedAt):
+		case underway != nil && underway.Paused && progress && !finishing && !occurredAt.Before(underway.StateChanged()):
 			underway.Paused = false
 			underway.UpdatedAt = now
-			if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx); err != nil {
+			underway.StateChangedAt = &occurredAt
+			if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at", "state_changed_at").WherePK().Exec(ctx); err != nil {
 				return errors.WithStack(err)
 			}
 			result.Resumed = true
@@ -322,11 +325,12 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			underway.Paused = false
 			underway.EndDay = &day
 			underway.UpdatedAt = now
-			_, err := tx.NewUpdate().Model(underway).Column("outcome", "paused", "end_day", "updated_at").WherePK().Exec(ctx)
+			underway.StateChangedAt = &occurredAt
+			_, err := tx.NewUpdate().Model(underway).Column("outcome", "paused", "end_day", "updated_at", "state_changed_at").WherePK().Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
 			}
-			if err := leaveToRead(ctx, tx, u.UserID, bookID, now); err != nil {
+			if err := leaveToRead(ctx, tx, u.UserID, bookID, occurredAt); err != nil {
 				return err
 			}
 			// A reported finish is the reader's own, so it's never undone.
@@ -698,7 +702,8 @@ func reopenAutoFinished(ctx context.Context, tx bun.Tx, rtID int, now time.Time)
 	rt.Outcome = models.ReadThroughOutcomeUnderway
 	rt.EndDay = nil
 	rt.UpdatedAt = now
-	if _, err := tx.NewUpdate().Model(rt).Column("outcome", "end_day", "updated_at").WherePK().Exec(ctx); err != nil {
+	rt.StateChangedAt = &now
+	if _, err := tx.NewUpdate().Model(rt).Column("outcome", "end_day", "updated_at", "state_changed_at").WherePK().Exec(ctx); err != nil {
 		return nil, errors.WithStack(err)
 	}
 	_, err = tx.NewUpdate().
@@ -915,11 +920,13 @@ func (svc *Service) ClearPosition(ctx context.Context, userID, fileID int) (int,
 // resetPositions deletes userID's Reading Positions in bookID's main Files
 // except keepFileID (0 keeps none), so their readers open at the start. A
 // supplement's place has nothing to do with the Read-through, so it stays. The
-// update log keeps its history.
-func resetPositions(ctx context.Context, db bun.IDB, userID, bookID, keepFileID int) error {
+// update log keeps its history. Only places reached by now are deleted, so a
+// change the Shisho app sends late, dated now, keeps a place saved since.
+func resetPositions(ctx context.Context, db bun.IDB, userID, bookID, keepFileID int, now time.Time) error {
 	_, err := db.NewDelete().
 		Model((*models.ReadingPosition)(nil)).
 		Where("user_id = ? AND file_id != ?", userID, keepFileID).
+		Where("occurred_at <= ?", now).
 		Where("file_id IN (SELECT id FROM files WHERE book_id = ? AND file_role = ?)", bookID, models.FileRoleMain).
 		Exec(ctx)
 	return errors.WithStack(err)
@@ -933,6 +940,16 @@ func userDay(ctx context.Context, db bun.IDB, userID int, instant time.Time) (st
 		return "", err
 	}
 	return instant.In(location).Format(time.DateOnly), nil
+}
+
+// TimeZone is the IANA zone userID's reading is grouped into days in: theirs,
+// or UTC when they set none.
+func (svc *Service) TimeZone(ctx context.Context, userID int) (string, error) {
+	location, err := userLocation(ctx, svc.db, userID)
+	if err != nil {
+		return "", err
+	}
+	return location.String(), nil
 }
 
 // userLocation is userID's time zone at the moment, or UTC when the user has

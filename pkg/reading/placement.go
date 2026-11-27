@@ -20,7 +20,7 @@ import (
 // that ended with no end day ended at some unknown time, so it covers no day
 // after its begin day for certain and takes nothing. The latest wins a day
 // two of them share, as when a reread began the day the read before it
-// ended.
+// ended. A history-only Read-through takes nothing (ADR 0028).
 func readThroughAt(ctx context.Context, db bun.IDB, userID, bookID int, instant time.Time) (*models.ReadThrough, error) {
 	day, err := userDay(ctx, db, userID, instant)
 	if err != nil {
@@ -30,6 +30,7 @@ func readThroughAt(ctx context.Context, db bun.IDB, userID, bookID int, instant 
 	err = db.NewSelect().
 		Model(rt).
 		Where("rt.user_id = ? AND rt.book_id = ?", userID, bookID).
+		Where("NOT rt.history_only").
 		Where("rt.begin_day IS NULL OR rt.begin_day <= ?", day).
 		Where("rt.outcome = ? OR rt.end_day >= ?", models.ReadThroughOutcomeUnderway, day).
 		OrderExpr("rt.id DESC").
@@ -46,6 +47,6 @@ func readThroughAt(ctx context.Context, db bun.IDB, userID, bookID int, instant 
 
 // coversDay reports whether rt was underway on day, by readThroughAt's rule.
 func coversDay(rt *models.ReadThrough, day string) bool {
-	return (rt.BeginDay == nil || *rt.BeginDay <= day) &&
+	return !rt.HistoryOnly && (rt.BeginDay == nil || *rt.BeginDay <= day) &&
 		(rt.Outcome == models.ReadThroughOutcomeUnderway || rt.EndDay != nil && *rt.EndDay >= day)
 }

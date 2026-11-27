@@ -89,9 +89,12 @@ const ToRead = () => {
       ?.cover_aspect_ratio ?? "book";
 
   const reorderMutation = useReorderToRead();
-  const handleReorder = async (bookIds: number[]) => {
+  const handleReorder = async (bookIds: number[], movedId: number) => {
     try {
-      await reorderMutation.mutateAsync({ book_ids: bookIds });
+      await reorderMutation.mutateAsync({
+        book_ids: bookIds,
+        moved_book_id: movedId,
+      });
     } catch (error) {
       toastRequestError(error, "Failed to reorder To Read");
       throw error; // DraggableBookList restores the previous order

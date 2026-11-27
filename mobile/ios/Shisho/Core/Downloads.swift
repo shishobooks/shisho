@@ -426,6 +426,33 @@ final class DownloadManager {
         remove(all)
     }
 
+    // MARK: - A whole Book
+
+    /// A Book's Downloads as they stand now, read when asked rather than
+    /// from what a screen last showed.
+    private func book(_ bookID: Int) -> BookDownloads? {
+        try? store.pool.read { try CatalogStore.bookDownloads($0, bookID: bookID) }
+    }
+
+    /// Downloads a Book's Files, supplements included, that aren't
+    /// downloaded or on their way.
+    func downloadBook(_ bookID: Int) {
+        guard let book = book(bookID) else { return }
+        download(book.missing.map(\.fileID))
+    }
+
+    /// Stops what a Book has on its way, keeping what's downloaded.
+    func cancelBook(_ bookID: Int) {
+        guard let book = book(bookID) else { return }
+        remove(book.cancellable)
+    }
+
+    /// Removes every Download of a Book's Files, freeing their space.
+    func removeBook(_ bookID: Int) {
+        guard let book = book(bookID) else { return }
+        remove(book.removable)
+    }
+
     /// A File was listened to or read to its end, which finishes its
     /// Read-through: its Download goes when the user asked for that. One
     /// still open, as in the reader, which reads it as pages open, is

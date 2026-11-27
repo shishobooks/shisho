@@ -1,0 +1,22 @@
+# Picks ${ITEM} from the open Book's Reading Status menu, and waits for the
+# status to read ${STATUS}. Not a flow of its own.
+appId: ${APP_ID}
+---
+- scrollUntilVisible:
+    element:
+      id: book.detail.status
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: book.detail.status
+    retryTapIfNoChange: true
+# A tap a stall drops leaves the menu open, so it's tapped again; one that
+# landed closed the menu.
+- tapOn:
+    text: ${ITEM}
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: book.detail.status
+      text: "Reading status: ${STATUS}"
+    timeout: 30000

@@ -90,7 +90,7 @@ describe("DraggableBookList", () => {
 
     await dragFirstOntoSecond();
 
-    expect(onReorder).toHaveBeenCalledWith([2, 1]);
+    expect(onReorder).toHaveBeenCalledWith([2, 1], 1);
     expect(titles()).toEqual(["Second", "First"]);
   });
 
@@ -107,7 +107,7 @@ describe("DraggableBookList", () => {
 
     await dragFirstOntoSecond();
 
-    expect(onReorder).toHaveBeenCalledWith([2, 1]);
+    expect(onReorder).toHaveBeenCalledWith([2, 1], 1);
     expect(titles()).toEqual(["First", "Second"]);
   });
 

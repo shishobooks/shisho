@@ -49,6 +49,8 @@ struct BookDetailView: View {
                             .padding(.top, (listen ?? nil) == nil ? 22 : 10)
                             .frame(maxWidth: 520)
                     }
+                    BookDownloadButton(bookID: bookID, spacing: (listen ?? nil) == nil && (read ?? nil) == nil ? 22 : 10)
+                        .frame(maxWidth: 520)
                     if let detail = book ?? nil {
                         details(detail)
                     }
@@ -195,25 +197,9 @@ struct BookDetailView: View {
     private func details(_ book: BookDetail) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             // The user's Reading Status and Rating, as the prototype sets
-            // them above the details. They're changed on the web for now.
-            if let standing, standing.status != nil || standing.rating != nil {
-                HStack {
-                    if let status = standing.status {
-                        Label(verbatim: ReadingStatusLabel.text(status), icon: StatusStyle.icon(status), size: 14, relativeTo: .footnote)
-                            .font(.geist(.footnote, weight: .medium))
-                            .padding(.horizontal, 12)
-                            .frame(minHeight: 34)
-                            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
-                            .accessibilityIdentifier("book.detail.status")
-                    }
-                    Spacer(minLength: 8)
-                    if let rating = standing.rating {
-                        RatingStars(units: rating)
-                    }
-                }
+            // them above the details, changed here online or not.
+            BookReadingControls(bookID: book.summary.id, title: book.summary.title)
                 .padding(.top, 24)
-            }
             let rows = infoRows(book)
             if !rows.isEmpty {
                 VStack(alignment: .leading, spacing: 14) {
@@ -333,6 +319,7 @@ private struct FileCard: View {
     /// this File, so the two never show different numbers.
     var listen: ListenProgress?
     @State private var download: DownloadRow??
+    @State private var clearing: BookDetail.File?
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
     private var isReadable: Bool { CatalogStore.readableTypes.contains(file.fileType) }
@@ -461,6 +448,18 @@ private struct FileCard: View {
                 ForEach(Array(narrators.enumerated()), id: \.offset) { _, narrator in
                     Button(String(localized: "Open \(narrator.1)")) { model.push(narrator.0) }
                 }
+                if canClear {
+                    Button(String(localized: "Clear saved position")) { clearing = file }
+                }
+            }
+            .contextMenu {
+                if canClear {
+                    Button { clearing = file } label: {
+                        Label("Clear saved position", menuIcon: .rotateCcw)
+                    }
+                    .accessibilityIdentifier("file.clearPosition.\(file.id)")
+                }
+                FileDownloadMenu(fileID: file.id, supported: FileTypes.isKnown(file.fileType), row: download ?? nil)
             }
             actions
         }
@@ -470,6 +469,12 @@ private struct FileCard: View {
         .observing(model.session?.store, id: file.id, into: $download) { [fileID = file.id] db in
             try CatalogStore.download(db, fileID: fileID)
         }
+        .clearPositionConfirmation($clearing)
+    }
+
+    /// The File has a saved place, and the server takes clearing it.
+    private var canClear: Bool {
+        model.offers(.clearPosition) && progress != nil
     }
 
     private var actions: some View {
@@ -569,17 +574,8 @@ struct RatingStars: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(0..<5, id: \.self) { index in
-                let fill = min(1, max(0, stars - Double(index)))
-                // As the web draws a rating: filled, half filled, or empty.
-                ZStack {
-                    Icon(fill >= 0.75 ? .starFill : .star, size: 17, relativeTo: nil)
-                    if fill >= 0.25, fill < 0.75 {
-                        Icon(.starHalfFill, size: 17, relativeTo: nil)
-                    }
-                }
-                .foregroundStyle(Theme.rating)
-            }
+            // Filled to the exact quarter, as the editable stars are.
+            PreciseStars(units: units, size: 17)
             Text(stars.formatted(.number.precision(.fractionLength(0...2))))
                 .font(.geist(.subheadline))
                 .foregroundStyle(Theme.mutedForeground)

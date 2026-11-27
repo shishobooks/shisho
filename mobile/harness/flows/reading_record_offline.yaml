@@ -1,0 +1,123 @@
+# With the server offline, mark a Book read, queue two Books on To Read and
+# move the second to the top, and make a List with a Book in it. Once the
+# server is back, it has each as it was left (#918).
+appId: ${APP_ID}
+name: Change the reading record offline, then sync
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runScript:
+    file: scripts/reset_record.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLES: Harness Manual,Harness Manga,Harness Webtoon
+      LISTS: Offline Picks
+- runFlow: subflows/launch_signed_in.yaml
+- runScript:
+    file: scripts/go_offline.js
+    env:
+      CONTROL: ${CONTROL}
+
+- runFlow:
+    file: subflows/open_book.yaml
+    env:
+      TITLE: Harness Manual
+- runFlow:
+    file: subflows/set_status.yaml
+    env:
+      ITEM: Mark as read
+      STATUS: Read
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/open_book.yaml
+    env:
+      TITLE: Harness Manga
+- runFlow:
+    file: subflows/set_status.yaml
+    env:
+      ITEM: Add to To Read
+      STATUS: To Read
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/open_book.yaml
+    env:
+      TITLE: Harness Webtoon
+- runFlow:
+    file: subflows/set_status.yaml
+    env:
+      ITEM: Add to To Read
+      STATUS: To Read
+
+# A new List, made from the Book's page with the Book in it.
+- tapOn:
+    id: book.detail.addToList
+- tapOn:
+    id: addToList.new
+- tapOn:
+    id: listForm.name
+- inputText: Offline Picks
+# A stall can drop typed text: typed again while the field doesn't hold it.
+- repeat:
+    while:
+      notVisible:
+        id: listForm.name
+        text: Offline Picks
+    times: 3
+    commands:
+      - eraseText
+      - inputText: Offline Picks
+- tapOn:
+    id: listForm.save
+- extendedWaitUntil:
+    visible:
+      id: addToList.row
+      text: ".*Offline Picks.*"
+    timeout: 30000
+- tapOn:
+    id: addToList.done
+
+# The second Book queued moves to the top.
+- tapOn:
+    id: tab.home
+- tapOn:
+    id: home.toRead.header
+- extendedWaitUntil:
+    visible:
+      id: toRead.row
+      text: ".*Harness Webtoon.*"
+    timeout: 30000
+- longPressOn:
+    id: toRead.row
+    text: ".*Harness Webtoon.*"
+- tapOn:
+    text: Move to Top
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: toRead.row
+      text: "1.*Harness Webtoon.*"
+    timeout: 30000
+
+# Back online, a refresh syncs; the script polls the server until it lands.
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- swipe:
+    start: 50%, 30%
+    end: 50%, 80%
+- runScript:
+    file: scripts/assert_record.js
+    env:
+      CONTROL: ${CONTROL}
+      READ: Harness Manual
+      TO_READ: Harness Webtoon,Harness Manga
+      LIST: Offline Picks
+      LIST_BOOK: Harness Webtoon
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: What changed offline reached the server as it was left

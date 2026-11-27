@@ -38,7 +38,7 @@ type ServerInfo struct {
 // X-Shisho-Capabilities header). An app turns a feature on for a server only
 // when it lists the feature's capability.
 const (
-	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles | typeof CapabilityPageFlow | typeof CapabilityPageImages;
+	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles | typeof CapabilityPageFlow | typeof CapabilityPageImages | typeof CapabilityReadingStatus | typeof CapabilityRatings | typeof CapabilityToRead | typeof CapabilityLists | typeof CapabilityClearPosition | typeof CapabilityReadingStats | typeof CapabilityReadingCalendar;
 	// CapabilityBookmarks is the Bookmark events in the journal and
 	// Bookmarks in the feed.
 	CapabilityBookmarks = "bookmarks"
@@ -51,6 +51,27 @@ const (
 	// CapabilityPageImages is the route that sends a CBZ's or PDF's pages
 	// as thumbnails, for the app's page grid before the File is downloaded.
 	CapabilityPageImages = "page_images"
+	// CapabilityReadingStatus is the Read-through and Reference events in
+	// the journal: start, finish, abandon, pause, resume, delete, and
+	// marking or removing Reference.
+	CapabilityReadingStatus = "reading_status"
+	// CapabilityRatings is the Rating events in the journal.
+	CapabilityRatings = "ratings"
+	// CapabilityToRead is the To Read events in the journal: add, remove,
+	// and move.
+	CapabilityToRead = "to_read"
+	// CapabilityLists is the List events in the journal: create, rename,
+	// and delete a List, and add, remove, and move its Books.
+	CapabilityLists = "lists"
+	// CapabilityClearPosition is the event that clears the user's saved
+	// place in a File.
+	CapabilityClearPosition = "clear_position"
+	// CapabilityReadingStats is the route that sends the user's Reading
+	// Stats, which the app keeps a copy of to show offline.
+	CapabilityReadingStats = "reading_stats"
+	// CapabilityReadingCalendar is the routes that send Reading Stats'
+	// Calendar: the heatmap, a month's calendar, and a day's Sessions.
+	CapabilityReadingCalendar = "reading_calendar"
 )
 
 // SignInPayload signs an installation in with the user's username and
@@ -416,6 +437,10 @@ type FeedList struct {
 	// Shares are who the List is shared with, as the web app shows them,
 	// for its owner and managers; empty for anyone else.
 	Shares []FeedListShare `json:"shares"`
+	// LocalID is the id an installation of the app made the List under, so
+	// that installation knows it as one of its own, or null for one made on
+	// the web.
+	LocalID *string `json:"local_id"`
 }
 
 // FeedListShare is one user a List is shared with, and what they may do.
@@ -486,6 +511,10 @@ type FeedReadThrough struct {
 	// it (reading.LastReadExpr): no place a link opened, and no supplement.
 	// Null before any.
 	LastReadAt *time.Time `json:"last_read_at"`
+	// BookTitle and BookAuthors are the deleted Book's title and author
+	// names, for Reading History, and null while the Book exists.
+	BookTitle   *string  `json:"book_title"`
+	BookAuthors []string `json:"book_authors" tstype:"string[] | null"`
 }
 
 // FeedBookmark is one of the user's Bookmarks: a moment in an audiobook
@@ -517,7 +546,7 @@ type JournalPayload struct {
 // The journal's event types. A new kind of change the app can make is a new
 // type, not a new protocol (ADR 0024).
 const (
-	//tygo:emit export type JournalEventType = typeof JournalEventReadingPosition | typeof JournalEventReadingSession | typeof JournalEventBookmarkCreate | typeof JournalEventBookmarkNote | typeof JournalEventBookmarkDelete | typeof JournalEventPageFlow;
+	//tygo:emit export type JournalEventType = typeof JournalEventReadingPosition | typeof JournalEventReadingSession | typeof JournalEventBookmarkCreate | typeof JournalEventBookmarkNote | typeof JournalEventBookmarkDelete | typeof JournalEventPageFlow | typeof JournalEventReadThroughStart | typeof JournalEventReadThroughFinish | typeof JournalEventReadThroughAbandon | typeof JournalEventReadThroughPause | typeof JournalEventReadThroughResume | typeof JournalEventReadThroughDelete | typeof JournalEventReferenceMark | typeof JournalEventReferenceRemove | typeof JournalEventRatingSet | typeof JournalEventRatingClear | typeof JournalEventToReadAdd | typeof JournalEventToReadRemove | typeof JournalEventToReadMove | typeof JournalEventListCreate | typeof JournalEventListRename | typeof JournalEventListDelete | typeof JournalEventListAdd | typeof JournalEventListRemove | typeof JournalEventListMove | typeof JournalEventPositionClear;
 	JournalEventReadingPosition = "reading_position"
 	JournalEventReadingSession  = "reading_session"
 	// The Bookmark events, sent only to a server that lists
@@ -528,6 +557,34 @@ const (
 	// The Page flow event, sent only to a server that lists
 	// CapabilityPageFlow.
 	JournalEventPageFlow = "page_flow"
+	// The Read-through and Reference events, sent only to a server that
+	// lists CapabilityReadingStatus. Each does what the web's status menu
+	// does, at the event's time (ADR 0028 orders them).
+	JournalEventReadThroughStart   = "read_through_start"
+	JournalEventReadThroughFinish  = "read_through_finish"
+	JournalEventReadThroughAbandon = "read_through_abandon"
+	JournalEventReadThroughPause   = "read_through_pause"
+	JournalEventReadThroughResume  = "read_through_resume"
+	JournalEventReadThroughDelete  = "read_through_delete"
+	JournalEventReferenceMark      = "reference_mark"
+	JournalEventReferenceRemove    = "reference_remove"
+	// The Rating events, sent only to a server that lists CapabilityRatings.
+	JournalEventRatingSet   = "rating_set"
+	JournalEventRatingClear = "rating_clear"
+	// The To Read events, sent only to a server that lists CapabilityToRead.
+	JournalEventToReadAdd    = "to_read_add"
+	JournalEventToReadRemove = "to_read_remove"
+	JournalEventToReadMove   = "to_read_move"
+	// The List events, sent only to a server that lists CapabilityLists.
+	JournalEventListCreate = "list_create"
+	JournalEventListRename = "list_rename"
+	JournalEventListDelete = "list_delete"
+	JournalEventListAdd    = "list_add"
+	JournalEventListRemove = "list_remove"
+	JournalEventListMove   = "list_move"
+	// The event that clears a File's saved place, sent only to a server
+	// that lists CapabilityClearPosition.
+	JournalEventPositionClear = "position_clear"
 )
 
 // JournalEvent is one change the app made. ID is unique to the
@@ -537,7 +594,7 @@ type JournalEvent struct {
 	ID      string          `json:"id"`
 	Type    string          `json:"type" tstype:"JournalEventType"`
 	At      time.Time       `json:"at"`
-	Payload json.RawMessage `json:"payload" tstype:"JournalPositionPayload | JournalSessionPayload | JournalBookmarkCreatePayload | JournalBookmarkNotePayload | JournalBookmarkRef | JournalPageFlowPayload"`
+	Payload json.RawMessage `json:"payload" tstype:"JournalPositionPayload | JournalSessionPayload | JournalBookmarkCreatePayload | JournalBookmarkNotePayload | JournalBookmarkRef | JournalPageFlowPayload | JournalBookPayload | JournalReadThroughDeletePayload | JournalRatingPayload | JournalToReadMovePayload | JournalListCreatePayload | JournalListRenamePayload | JournalListRef | JournalListBookPayload | JournalListMovePayload | JournalFilePayload"`
 }
 
 // JournalPositionPayload is a Reading Position update: where the user is in
@@ -615,6 +672,300 @@ type JournalBookmarkNotePayload struct {
 type JournalPageFlowPayload struct {
 	BookID   int     `json:"book_id" validate:"required,min=1"`
 	PageFlow *string `json:"page_flow" validate:"required,oneof=paginated scrolled" tstype:"PageFlow"`
+}
+
+// JournalBookPayload names the Book a status, Reference, Rating clear, or
+// To Read event changes. Day is the phone's own day at the event, which
+// dates a Read-through it starts or ends when the user has set no time
+// zone on the server.
+type JournalBookPayload struct {
+	BookID int    `json:"book_id" validate:"required,min=1"`
+	Day    string `json:"day,omitempty" validate:"omitempty,date"`
+}
+
+// JournalReadThroughDeletePayload deletes one of the user's Read-throughs:
+// ReadThroughID, from the feed, or, with BookID instead, the one underway
+// in that Book, as Mark as not started does, unless it began after Day.
+// One already gone stays gone.
+type JournalReadThroughDeletePayload struct {
+	ReadThroughID *int   `json:"read_through_id,omitempty" validate:"omitempty,min=1"`
+	BookID        *int   `json:"book_id,omitempty" validate:"omitempty,min=1"`
+	Day           string `json:"day,omitempty" validate:"omitempty,date"`
+}
+
+// JournalRatingPayload sets a Book's Rating, in quarter stars from 1 to 20,
+// unless it changed later elsewhere: the latest instant wins.
+type JournalRatingPayload struct {
+	BookID int `json:"book_id" validate:"required,min=1"`
+	Rating int `json:"rating" validate:"required,min=1,max=20"`
+}
+
+// JournalToReadMovePayload moves a Book on To Read to just after
+// AfterBookID, or to the top when it's null. The latest move of each Book
+// wins.
+type JournalToReadMovePayload struct {
+	BookID      int  `json:"book_id" validate:"required,min=1"`
+	AfterBookID *int `json:"after_book_id,omitempty" validate:"omitempty,min=1"`
+}
+
+// JournalListRef names a List by exactly one of its server id, from the
+// feed, or the LocalID the installation made it under.
+type JournalListRef struct {
+	ListID  *int    `json:"list_id,omitempty" validate:"omitempty,min=1"`
+	LocalID *string `json:"local_id,omitempty" validate:"omitempty,min=1,max=64"`
+}
+
+// JournalListCreatePayload makes a List the user owns, once per LocalID:
+// sent again, even after it was deleted, it changes nothing.
+type JournalListCreatePayload struct {
+	// LocalID is the installation's own id for the List, a UUID, which
+	// later events name it by until the feed brings its server id.
+	LocalID     string  `json:"local_id" validate:"required,max=64"`
+	Name        string  `json:"name" mod:"trim" validate:"required,min=1,max=200"`
+	Description *string `json:"description,omitempty" validate:"omitempty,max=2000"`
+	IsOrdered   bool    `json:"is_ordered,omitempty"`
+}
+
+// JournalListRenamePayload renames a List the user owns or manages.
+type JournalListRenamePayload struct {
+	JournalListRef
+	Name string `json:"name" mod:"trim" validate:"required,min=1,max=200"`
+}
+
+// JournalListBookPayload adds a Book to a List, or removes it, for a user
+// who can edit the List. A removal doesn't undo an add made later elsewhere.
+type JournalListBookPayload struct {
+	JournalListRef
+	BookID int `json:"book_id" validate:"required,min=1"`
+}
+
+// JournalListMovePayload moves a Book in an ordered List to just after
+// AfterBookID, or to the top when it's null. The latest move of each Book
+// wins.
+type JournalListMovePayload struct {
+	JournalListRef
+	BookID      int  `json:"book_id" validate:"required,min=1"`
+	AfterBookID *int `json:"after_book_id,omitempty" validate:"omitempty,min=1"`
+}
+
+// JournalFilePayload names the File whose saved place a clear removes. A
+// place saved after the event, such as by another reader, stands.
+type JournalFilePayload struct {
+	FileID int `json:"file_id" validate:"required,min=1"`
+}
+
+// StatsQuery picks the range the user's Reading Stats cover: one calendar
+// year, or all time when Year is omitted.
+type StatsQuery struct {
+	Year *int `query:"year" json:"year,omitempty" validate:"omitempty,min=1,max=9999"`
+}
+
+// StatsResponse is the user's Reading Stats for one range, as the web's
+// Reading Stats page shows them. The app keeps a copy of each range it
+// shows, and adds its own unsent reading on top until the next sync.
+type StatsResponse struct {
+	// Year is the year covered, or null for all time.
+	Year *int `json:"year"`
+	// Years are the years with any reading, newest first.
+	Years []int `json:"years"`
+	// TimeZone is the IANA zone the server groups reading into days in: the
+	// user's, or UTC when they set none.
+	TimeZone string             `json:"time_zone"`
+	Totals   StatsTotals        `json:"totals"`
+	Pace     StatsPace          `json:"pace"`
+	Periods  []StatsPeriod      `json:"periods"`
+	Genres   []StatsCount       `json:"genres"`
+	Tags     []StatsCount       `json:"tags"`
+	Authors  []StatsCount       `json:"authors"`
+	Kinds    []StatsKindCount   `json:"kinds"`
+	Ratings  []StatsRatingCount `json:"ratings"`
+	Places   []StatsPlace       `json:"places"`
+}
+
+// StatsTotals are the range's summary figures.
+type StatsTotals struct {
+	// Finished counts finished Read-throughs, rereads included, and Rereads
+	// how many of those were of a Book finished before.
+	Finished int `json:"finished"`
+	Rereads  int `json:"rereads"`
+	// FinishedBooks is how many distinct Books the breakdowns count from,
+	// each finished Book once, so a row's share is its Books over this. Null
+	// from a server before it was sent.
+	FinishedBooks *int `json:"finished_books"`
+	DidNotFinish  int  `json:"did_not_finish"`
+	// ReadingSeconds and ListeningSeconds are Reading Session time.
+	ReadingSeconds   int `json:"reading_seconds"`
+	ListeningSeconds int `json:"listening_seconds"`
+	// WordsRead is how far the user read through Reflowable Files with a
+	// word count, in words.
+	WordsRead int `json:"words_read"`
+	// AverageRating is the mean Rating, in stars, of the finished Books the
+	// user rated, or null with none.
+	AverageRating *float64 `json:"average_rating"`
+}
+
+// StatsPace is how fast the user reads and listens, per kind of File, each
+// null without enough timed reading.
+type StatsPace struct {
+	WordsPerMinute    *float64 `json:"words_per_minute"`
+	ComicPagesPerHour *float64 `json:"comic_pages_per_hour"`
+	PDFPagesPerHour   *float64 `json:"pdf_pages_per_hour"`
+	// ListeningSpeed is audiobook time covered per second spent.
+	ListeningSpeed *float64 `json:"listening_speed"`
+}
+
+// StatsPeriod is one month of a year, or one year of all time.
+type StatsPeriod struct {
+	Year int `json:"year"`
+	// Month is 1 to 12, or null when the period is the whole year.
+	Month            *int `json:"month"`
+	Finished         int  `json:"finished"`
+	ReadingSeconds   int  `json:"reading_seconds"`
+	ListeningSeconds int  `json:"listening_seconds"`
+}
+
+// StatsCount is how many distinct finished Books fall under one name.
+type StatsCount struct {
+	Name  string `json:"name"`
+	Books int    `json:"books"`
+}
+
+// StatsKindCount is how many distinct finished Books were read as one kind:
+// "ebook", "comic", "audiobook", or "unknown".
+type StatsKindCount struct {
+	Kind  string `json:"kind"`
+	Books int    `json:"books"`
+}
+
+// StatsRatingCount is how many finished Books have one Rating, in stars.
+type StatsRatingCount struct {
+	Rating float64 `json:"rating"`
+	Books  int     `json:"books"`
+}
+
+// StatsPlace is the time spent reading in one place: the web reader, one of
+// the user's Devices (DeviceID and DeviceName), or a device that's no
+// longer one of them.
+type StatsPlace struct {
+	Source           string  `json:"source" tstype:"ReadingSource"`
+	DeviceID         *string `json:"device_id"`
+	DeviceName       *string `json:"device_name"`
+	ReadingSeconds   int     `json:"reading_seconds"`
+	ListeningSeconds int     `json:"listening_seconds"`
+}
+
+// StatsHeatmapQuery picks the heatmap's year, or the last 12 months when
+// Year is omitted.
+type StatsHeatmapQuery struct {
+	Year *int `query:"year" json:"year,omitempty" validate:"omitempty,min=1,max=9999"`
+}
+
+// StatsHeatmapResponse is the user's reading a day at a time, for the
+// heatmap on Reading Stats' Calendar tab, as the web's. Days are in the
+// user's time zone, a Session past midnight split between both. The app
+// keeps a copy of each it shows (CapabilityReadingCalendar).
+type StatsHeatmapResponse struct {
+	// Today is the user's today.
+	Today string `json:"today"`
+	// From and To are the heatmap's first and last days: the last 12 months
+	// up to Today, or the whole year asked for.
+	From string `json:"from"`
+	To   string `json:"to"`
+	// FirstDay is the earliest day the user read or began or ended a
+	// Read-through, which the calendar goes back to. Null with no reading
+	// at all.
+	FirstDay *string `json:"first_day"`
+	// Days are the days from From to To with Session time, in order.
+	Days []StatsDay `json:"days"`
+}
+
+// StatsDay is the Session time that fell on one day.
+type StatsDay struct {
+	Day              string `json:"day"`
+	ReadingSeconds   int    `json:"reading_seconds"`
+	ListeningSeconds int    `json:"listening_seconds"`
+}
+
+// StatsCalendarQuery picks the month the calendar shows.
+type StatsCalendarQuery struct {
+	Year  int `query:"year" json:"year" validate:"required,min=1,max=9999"`
+	Month int `query:"month" json:"month" validate:"required,min=1,max=12"`
+}
+
+// StatsCalendarResponse is one month of the Reading Stats calendar: each
+// day with reading or a finish, and the Books on them.
+type StatsCalendarResponse struct {
+	Year  int `json:"year"`
+	Month int `json:"month"`
+	// Books are every Book read or finished in the month, by title.
+	Books []StatsBookRef `json:"books"`
+	// Days are the days with anything on them, in order.
+	Days []StatsCalendarDay `json:"days"`
+}
+
+// StatsCalendarDay is one day of the calendar and the Books on it.
+type StatsCalendarDay struct {
+	Day   string                 `json:"day"`
+	Books []StatsCalendarDayBook `json:"books"`
+}
+
+// StatsCalendarDayBook is one Book on one calendar day: the Session time
+// spent on it that day, and whether a Read-through of it finished that day.
+type StatsCalendarDayBook struct {
+	Key      string `json:"key"`
+	Seconds  int    `json:"seconds"`
+	Finished bool   `json:"finished"`
+}
+
+// StatsBookRef names a Book on the calendar and in a day's detail.
+type StatsBookRef struct {
+	// Key stays the same for a Book in every month, so it picks the Book's
+	// color the way the web's calendar does.
+	Key   string `json:"key"`
+	Title string `json:"title"`
+	// Removed is true when the Book was deleted.
+	Removed bool `json:"removed"`
+	// BookID is the Book when the user can still reach it, which the app
+	// finds in its own catalog: null when it was deleted or sits in a
+	// library they no longer have access to.
+	BookID *int `json:"book_id"`
+}
+
+// StatsDayQuery picks the day whose Sessions the calendar lists.
+type StatsDayQuery struct {
+	Day string `query:"day" json:"day" validate:"required,date"`
+}
+
+// StatsDayResponse is one day's Reading Sessions, in the user's time zone,
+// and the Read-throughs finished that day.
+type StatsDayResponse struct {
+	Day string `json:"day"`
+	// TimeZone is the IANA zone the day is in: the user's, or UTC when they
+	// set none.
+	TimeZone string            `json:"time_zone"`
+	Sessions []StatsDaySession `json:"sessions"`
+	Finished []StatsBookRef    `json:"finished"`
+}
+
+// StatsDaySession is one Reading Session that touched the day, in the order
+// they started. StartedAt and EndedAt are the whole Session, which may begin
+// the day before or end the day after; Seconds is its time on this day.
+type StatsDaySession struct {
+	ID              int          `json:"id"`
+	Book            StatsBookRef `json:"book"`
+	StartedAt       time.Time    `json:"started_at"`
+	EndedAt         time.Time    `json:"ended_at"`
+	Seconds         int          `json:"seconds"`
+	StartPercentage float64      `json:"start_percentage"`
+	EndPercentage   float64      `json:"end_percentage"`
+	Kind            string       `json:"kind" tstype:"ReadingKind"`
+	Source          string       `json:"source" tstype:"ReadingSource"`
+	// Measured is false for a Session its source estimated.
+	Measured bool `json:"measured"`
+	// DeviceID and DeviceName are the user's Device it came from, null for
+	// the web reader or a Device since deleted.
+	DeviceID   *string `json:"device_id"`
+	DeviceName *string `json:"device_name"`
 }
 
 // What the server did with each event.

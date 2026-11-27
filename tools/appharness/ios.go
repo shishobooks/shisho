@@ -320,6 +320,29 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+	// The harness user's reading record: the latest outcome and whether
+	// there's a place for each Book in ?titles= (comma-separated), To Read,
+	// their Lists, and their listening time.
+	mux.HandleFunc("GET /record", func(w http.ResponseWriter, r *http.Request) {
+		record, err := readRecord(r.Context(), filepath.Join(srv.dir, "data.sqlite"), splitParam(r.URL.Query().Get("titles")))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(record)
+	})
+	// Takes the Books in ?titles= back to unread, off To Read, and deletes
+	// the harness user's Lists in ?lists=, for a flow that checks what it
+	// changes.
+	mux.HandleFunc("POST /record/reset", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if err := resetRecord(r.Context(), filepath.Join(srv.dir, "data.sqlite"), splitParam(q.Get("titles")), splitParam(q.Get("lists"))); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	// Answers after ?ms= milliseconds, at most 5 s: Maestro's scripts have no
 	// sleep, so the assert_*.js scripts wait here between polls.
 	mux.HandleFunc("GET /wait", func(w http.ResponseWriter, r *http.Request) {

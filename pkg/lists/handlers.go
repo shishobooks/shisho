@@ -463,8 +463,9 @@ func (h *handler) reorderBooks(c echo.Context) error {
 	}
 
 	err = h.listsService.ReorderBooks(ctx, ReorderBooksOptions{
-		ListID:  id,
-		BookIDs: params.BookIDs,
+		ListID:      id,
+		BookIDs:     params.BookIDs,
+		MovedBookID: params.MovedBookID,
 	})
 	if err != nil {
 		return errors.WithStack(err)

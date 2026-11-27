@@ -425,6 +425,7 @@ func loadReadThroughs(ctx context.Context, tx bun.IDB, userID int, ids []int) (m
 	for _, rt := range readThroughs {
 		out[rt.ID] = &FeedReadThrough{
 			ID: rt.ID, BookID: rt.BookID, BeginDay: rt.BeginDay, EndDay: rt.EndDay, Outcome: rt.Outcome, Paused: rt.Paused,
+			BookTitle: rt.BookTitle, BookAuthors: rt.BookAuthors,
 		}
 	}
 	// When each was last read, counted as reading.LastReadExpr counts it.
@@ -738,6 +739,19 @@ func loadLists(ctx context.Context, tx bun.IDB, user *models.User, ids []int) (m
 			doc.Books = append(doc.Books, FeedListBook{BookID: listBook.BookID, SortOrder: listBook.SortOrder, AddedAt: listBook.AddedAt.UTC()})
 		}
 		out[list.ID] = doc
+	}
+	// The id an installation made each under, which it reads only for its
+	// own Lists.
+	var links []*journalList
+	err = tx.NewSelect().Model(&links).Where("user_id = ? AND list_id IN (?)", user.ID, bun.List(ids)).Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, link := range links {
+		if doc := out[*link.ListID]; doc != nil {
+			localID := link.LocalID
+			doc.LocalID = &localID
+		}
 	}
 	return out, nil
 }

@@ -82,15 +82,23 @@ final class AppModel {
         didSet { sessionChanged(from: oldValue) }
     }
     private(set) var syncStatus: SyncStatus = .idle
+    /// The capabilities the signed-in account's server listed last, so a
+    /// feature that writes an event type it doesn't list stays hidden (ADR
+    /// 0024).
+    private(set) var capabilities: Set<String> = []
     /// The signed-in account's audiobook player.
     private(set) var player: AudioPlayer?
     /// Now Playing is open.
     var showingPlayer = false
+    /// A keyboard is up, whatever its height, with or without the bar of
+    /// next, previous, and Done above it: the mini player sits on it rather
+    /// than above the tab bar it covers (MainTabs).
+    var keyboardShowing = false
     /// The ebook open in the reader, which records reading whatever the
     /// screen does, as the player records listening.
     private(set) var reader: OpenReader?
     /// The tab showing, and each tab's navigation: the pages pushed on it.
-    var tab: AppTab = .library
+    var tab: AppTab = .home
     /// The Related tab a Book opened from the Related panel starts on, as
     /// the web carries its tab along the panel's links. The Book's page takes
     /// it when it opens.
@@ -100,6 +108,10 @@ final class AppModel {
     var libraryPath: [Route] {
         get { navigation.path(.library) }
         set { navigation.setPath(newValue, on: .library) }
+    }
+    var homePath: [Route] {
+        get { navigation.path(.home) }
+        set { navigation.setPath(newValue, on: .home) }
     }
     var listsPath: [Route] {
         get { navigation.path(.lists) }
@@ -218,6 +230,7 @@ final class AppModel {
         stopPrefetching()
         stopChecking()
         libraryID = session.map { UserDefaults.standard.integer(forKey: AccountData(accountID: $0.account.id).libraryIDKey) } ?? 0
+        capabilities = Set(session?.capabilities.withLock { $0 } ?? [])
         filter = LibraryFilter()
         loadSort()
         if let session {
@@ -463,12 +476,20 @@ final class AppModel {
     func listen(fileID: Int) {
         player?.open(fileID: fileID, autoplay: true)
         showingPlayer = true
+        noteOpened(fileID: fileID)
+    }
+
+    /// Notes the File's Book as opened on this device, for Home's Recent
+    /// Reference.
+    private func noteOpened(fileID: Int) {
+        try? session?.store.noteOpened(fileID: fileID)
     }
 
     /// Plays an audiobook File from seconds in, such as a chapter's start.
     func listen(fileID: Int, from seconds: Double) {
         guard let player else { return }
         player.open(fileID: fileID, autoplay: false)
+        noteOpened(fileID: fileID)
         // A File that couldn't be opened, such as one a sync just removed,
         // leaves the one before it loaded, whose place mustn't move.
         guard player.file?.fileID == fileID else { return }
@@ -482,6 +503,7 @@ final class AppModel {
     /// there, as a tile of its page grid does, rather than at its place.
     func read(fileID: Int, page: Int? = nil) {
         guard let session else { return }
+        noteOpened(fileID: fileID)
         let file: ReadingFile?
         do {
             file = try session.store.pool.read { try CatalogStore.readingFile($0, fileID: fileID) }
@@ -533,6 +555,40 @@ final class AppModel {
 
     func dismissJournalNotes() {
         try? session?.store.dismissJournalNotes()
+    }
+
+    // MARK: - The reading record
+
+    /// Fetches Reading Stats for a year, or all time, that the device has
+    /// no copy of yet. Offline, the page says it needs a connection.
+    func loadStats(year: Int?) async {
+        guard let session, networkAvailable else { return }
+        if let year { session.sync.want(year: year) }
+        await syncNow()
+    }
+
+    /// The account's server lists capability.
+    func offers(_ capability: Shishoapp.Capability) -> Bool {
+        capabilities.contains(capability.rawValue)
+    }
+
+    /// Records a change to the user's reading record: it shows at once, and
+    /// goes to the server now when it can, or at the next sync (ADR 0024).
+    /// A List it makes returns its id here.
+    @discardableResult
+    func change(_ change: ReadingChange) -> Int? {
+        guard let session, offers(change.capability) else { return nil }
+        do {
+            let made = try session.store.record(change)
+            if case .clearPosition(let fileID) = change {
+                player?.positionCleared(fileID: fileID)
+            }
+            Task { await syncNow() }
+            return made
+        } catch {
+            Task { await Diagnostics.shared.log(.app, "reading change not saved: \(Diagnostics.describe(error))") }
+            return nil
+        }
     }
 
     // MARK: - Signing in and out
@@ -697,6 +753,7 @@ final class AppModel {
         signedOutAccount = nil
         serverReplacedAccountID = nil
         addingAccount = false
+        tab = .home
         // Changes that couldn't be counted are said too. Without a
         // replacement, a notice from an earlier sign-in stays until it's
         // dismissed, shown only on its own account.
@@ -1118,6 +1175,9 @@ final class AppModel {
 
     private func recordCapabilities(_ listed: [String], accountID: String) {
         guard session?.account.id == accountID, var account = stored(accountID) else { return }
+        if capabilities != Set(listed) {
+            capabilities = Set(listed)
+        }
         player?.capabilitiesChanged(listed)
         guard account.capabilities != listed else { return }
         account.capabilities = listed
@@ -1226,7 +1286,7 @@ enum Messages {
 
 /// The app's tabs.
 enum AppTab: Hashable {
-    case library, lists, downloads
+    case home, library, lists, downloads
 }
 
 /// Each tab's pages, and which tabs' searches are active. Every change to a
@@ -1296,6 +1356,16 @@ enum Route: Hashable {
     case search
     /// The Download settings, from the Downloads tab's toolbar.
     case downloadSettings
+    /// Home's pages: every Book underway, the Reference Books opened
+    /// lately, To Read, Reading History, and Reading Stats.
+    case currentlyReading
+    case recentReference
+    case toRead
+    case history
+    case stats
+    /// The finished Books a Reading Stats breakdown row counts, in the
+    /// year it showed, or all time for nil.
+    case statsFinished(StatsFinishedFilter, year: Int?)
 }
 
 /// The File open in a reader, which records reading whatever the screen

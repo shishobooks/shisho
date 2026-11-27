@@ -1,0 +1,18 @@
+# Shows the Home tab's first screen. A tap on the tab shows it, and a
+# tap while it shows goes back to its first screen, so it's tapped until
+# that screen shows, in case a stall drops one. Not a flow of its own.
+appId: ${APP_ID}
+---
+- repeat:
+    while:
+      notVisible:
+        id: home.root
+    times: 4
+    commands:
+      - tapOn:
+          id: tab.home
+      - extendedWaitUntil:
+          visible:
+            id: home.root
+          timeout: 5000
+          optional: true

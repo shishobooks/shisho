@@ -327,12 +327,26 @@ extension CatalogStore {
         try append(db, type: .readingSession, at: session.endedAt, payload: data, fileID: session.fileID, coalesceKey: key)
     }
 
+    /// Queues an event, in the caller's transaction, and lays a change to
+    /// the reading record over what screens show: a place or a session only
+    /// its Book's, since those come many times a minute while reading.
+    /// It returns the event's place in the journal.
+    @discardableResult
     static func append(_ db: Database, type: Shishoapp.JournalEventType, at: Date, payload: Data, fileID: Int?,
-                       coalesceKey: String?, bookmarkID: String? = nil) throws {
+                       coalesceKey: String?, bookmarkID: String? = nil, bookID: Int? = nil) throws -> Int {
+        let book = try bookID ?? fileID.flatMap { try Int.fetchOne(db, sql: "SELECT book_id FROM book_files WHERE id = ?", arguments: [$0]) }
         try db.execute(sql: """
-            INSERT INTO journal (event_id, type, at, payload, file_id, coalesce_key, bookmark_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO journal (event_id, type, at, payload, file_id, coalesce_key, bookmark_id, book_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, arguments: [UUID().uuidString.lowercased(), type.rawValue, at.timeIntervalSince1970, payload, fileID, coalesceKey,
-                             bookmarkID])
+                             bookmarkID, book])
+        let seq = Int(db.lastInsertedRowID)
+        guard layerTypes.contains(type.rawValue) else { return seq }
+        if type == .readingPosition || type == .readingSession {
+            if let book { try rebuildLayer(db, books: [book]) }
+        } else {
+            try rebuildLayer(db)
+        }
+        return seq
     }
 
     /// The sitting being timed, kept across launches.
@@ -370,6 +384,7 @@ extension CatalogStore {
             for result in results where types[result.id] != nil {
                 switch result.result {
                 case .accepted, .duplicate:
+                    try CatalogStore.keepAccepted(eventID: result.id, in: db)
                     try CatalogStore.finishBookmarkChange(eventID: result.id, duplicate: result.result == .duplicate, in: db)
                     // Kept until the feed brings the Book's flow as the
                     // server kept it.
@@ -385,6 +400,10 @@ extension CatalogStore {
                     try db.execute(sql: "UPDATE journal SET held_for = ?, held_reason = ? WHERE event_id = ?",
                                    arguments: [capabilities, result.reason, result.id])
                 }
+            }
+            // A refused change falls away from what screens show.
+            if results.contains(where: { $0.result == .refused && CatalogStore.layerTypes.contains(types[$0.id] ?? "") }) {
+                try CatalogStore.rebuildLayer(db)
             }
         }
     }

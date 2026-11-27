@@ -54,7 +54,7 @@ func (svc *Service) SetDeviceStatus(ctx context.Context, s DeviceStatus) error {
 		switch s.Status {
 		case models.ReadingStatusRead:
 			if underway == nil {
-				if _, err := insertFinishedReadThrough(ctx, tx, s.UserID, bookID, s.Day, now); err != nil {
+				if _, err := insertFinishedReadThrough(ctx, tx, s.UserID, bookID, s.Day, now, now); err != nil {
 					return err
 				}
 				break
@@ -68,7 +68,8 @@ func (svc *Service) SetDeviceStatus(ctx context.Context, s DeviceStatus) error {
 			underway.Paused = false
 			underway.EndDay = &endDay
 			underway.UpdatedAt = now
-			_, err := tx.NewUpdate().Model(underway).Column("outcome", "paused", "end_day", "updated_at").WherePK().Exec(ctx)
+			underway.StateChangedAt = &now
+			_, err := tx.NewUpdate().Model(underway).Column("outcome", "paused", "end_day", "updated_at", "state_changed_at").WherePK().Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -79,7 +80,7 @@ func (svc *Service) SetDeviceStatus(ctx context.Context, s DeviceStatus) error {
 			paused := s.Status == models.ReadingStatusPaused
 			if underway == nil {
 				// The device's copy keeps its place: it's where the device is.
-				underway, err = startReadThrough(ctx, tx, s.UserID, bookID, s.Day, now, s.FileID)
+				underway, err = startReadThrough(ctx, tx, s.UserID, bookID, s.Day, now, now, s.FileID)
 				if err != nil {
 					return err
 				}
@@ -87,7 +88,8 @@ func (svc *Service) SetDeviceStatus(ctx context.Context, s DeviceStatus) error {
 			if underway.Paused != paused {
 				underway.Paused = paused
 				underway.UpdatedAt = now
-				if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx); err != nil {
+				underway.StateChangedAt = &now
+				if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at", "state_changed_at").WherePK().Exec(ctx); err != nil {
 					return errors.WithStack(err)
 				}
 			}
@@ -161,7 +163,10 @@ func (svc *Service) ChangedSince(ctx context.Context, userID int, since time.Tim
 		Union(svc.db.NewSelect().
 			ColumnExpr("ub.book_id").
 			TableExpr("user_books AS ub").
-			Where("ub.user_id = ? AND (ub.rating_updated_at > ? OR ub.status_chosen_at > ?)", userID, since, since)).
+			// The Shisho app's late changes stamp the rating and choice with
+			// when they happened, so updated_at, the server's clock, finds
+			// them.
+			Where("ub.user_id = ? AND (ub.rating_updated_at > ? OR ub.status_chosen_at > ? OR ub.updated_at > ?)", userID, since, since, since)).
 		Scan(ctx, &bookIDs)
 	return bookIDs, errors.WithStack(err)
 }

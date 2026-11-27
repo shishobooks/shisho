@@ -82,12 +82,27 @@ struct DownloadControl: View {
                 // Downloading needs the server, as listening and reading do.
                 .modifier(NeedsConnection(available: !supported || model.connection == .online))
             case .waiting, .running:
-                Button { model.session?.downloads.remove([fileID]) } label: {
-                    DownloadRing(fraction: { if case .running(let fraction) = status { return fraction } else { return nil } }())
-                        .controlCircle(tinted: true)
+                let ring = DownloadRing(fraction: { if case .running(let fraction) = status { return fraction } else { return nil } }())
+                    .controlCircle(tinted: true)
+                if row?.replacing == true {
+                    // A replaced File's new copy comes with its old one
+                    // still here, which stopping it removes too, so it asks.
+                    Menu {
+                        Button(role: .destructive) { model.session?.downloads.remove([fileID]) } label: {
+                            Label("Remove Download", menuIcon: .trash)
+                        }
+                    } label: {
+                        ring
+                    }
+                    .accessibilityLabel(String(localized: "Downloading \(label) again"))
+                    .accessibilityValue(DownloadWords.progress(status))
+                } else {
+                    Button { model.session?.downloads.remove([fileID]) } label: {
+                        ring
+                    }
+                    .accessibilityLabel(String(localized: "Stop downloading \(label)"))
+                    .accessibilityValue(DownloadWords.progress(status))
                 }
-                .accessibilityLabel(String(localized: "Stop downloading \(label)"))
-                .accessibilityValue(DownloadWords.progress(status))
             case .downloaded:
                 Menu {
                     Button(role: .destructive) { model.session?.downloads.remove([fileID]) } label: {
@@ -376,6 +391,7 @@ struct DownloadsView: View {
     @Environment(AppModel.self) private var model
     @State private var downloads: [StoredDownload]?
     @State private var confirmingRemoveAll = false
+    @State private var scrolledBy: CGFloat = 0
 
     var body: some View {
         @Bindable var model = model
@@ -383,7 +399,11 @@ struct DownloadsView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        Color.clear.frame(height: 0).id(ScrollTop.anchor)
+                        ScrollTopMarker(space: "downloads")
+                            .id(ScrollTop.anchor)
+                        TabHeading(title: String(localized: "Downloads"))
+                            .padding(.top, 4)
+                            .padding(.bottom, -8)
                         if let downloads {
                             summary(downloads)
                             if downloads.isEmpty {
@@ -417,15 +437,23 @@ struct DownloadsView: View {
                     .frame(maxWidth: 680)
                     .frame(maxWidth: .infinity)
                 }
+                .onScrolledDistanceChange(space: "downloads") { distance in
+                    // Only as far as the bar's logo or title changes, so the
+                    // page isn't redrawn on every frame of a long scroll.
+                    let settled = min(LogoToolbarItem.settledAfter, distance)
+                    if settled != scrolledBy { scrolledBy = settled }
+                }
                 .miniPlayerClearance()
                 .onChange(of: model.scrollToTop[.downloads]) { _, _ in
                     withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
                 }
             }
             .background(Theme.background)
-            .navigationTitle("Downloads")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar { RootToolbar(downloadSettings: true) }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                LogoToolbarItem(scrolledBy: scrolledBy, title: String(localized: "Downloads"))
+                RootToolbar(downloadSettings: true)
+            }
             .routeDestinations()
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloads) { db in
@@ -571,13 +599,13 @@ private struct DownloadRowView: View {
             .accessibilityIdentifier("downloads.row")
 
             Button { model.session?.downloads.remove([item.fileID]) } label: {
-                Icon(item.state == .done ? .trash : .x, size: 18, relativeTo: nil)
+                Icon(item.state == .done || item.replacing ? .trash : .x, size: 18, relativeTo: nil)
                     .foregroundStyle(Theme.mutedForeground)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(item.state == .done
+            .accessibilityLabel(item.state == .done || item.replacing
                                 ? String(localized: "Remove the Download of \(item.book.title), \(item.label)")
                                 : String(localized: "Stop downloading \(item.book.title), \(item.label)"))
             .accessibilityIdentifier("downloads.remove")
@@ -586,7 +614,7 @@ private struct DownloadRowView: View {
         .padding(.vertical, 10)
         .contextMenu {
             Button(role: .destructive) { model.session?.downloads.remove([item.fileID]) } label: {
-                Label(item.state == .done ? "Remove Download" : "Stop Download", menuIcon: .trash)
+                Label(item.state == .done || item.replacing ? "Remove Download" : "Stop Download", menuIcon: .trash)
             }
         }
     }

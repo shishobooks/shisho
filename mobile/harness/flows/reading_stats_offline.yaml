@@ -1,0 +1,163 @@
+# Listening done offline shows in Reading Stats at once, and Reading History
+# marks it as not synced yet. Its File's saved place is cleared offline too.
+# Once the server is back and the app syncs, the time is counted once, as
+# the server counts it, and the server has no place left in the File
+# (#918).
+appId: ${APP_ID}
+name: Reading Stats count offline listening once, and a cleared place syncs
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+# Unread, so listening starts a Read-through whatever an earlier flow left.
+- runScript:
+    file: scripts/reset_record.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLES: Harbor Lights
+- runFlow: subflows/launch_signed_in.yaml
+# Reading Stats are fetched while online, so a copy shows offline.
+- tapOn:
+    id: tab.home
+- scrollUntilVisible:
+    element:
+      id: reading.stats
+    direction: DOWN
+    # In the middle, not peeking out above the tab bar and the offline
+    # notice, where a tap lands on the tab bar instead. The last rows on
+    # Home can't reach the middle, so Maestro keeps swiping a while.
+    centerElement: true
+    timeout: 45000
+- tapOn:
+    id: reading.stats
+# The tiles, or the empty state for a year with no reading yet.
+- extendedWaitUntil:
+    visible:
+      id: "stats\\.(listening|empty)"
+    timeout: 30000
+# Playback starts online, so the player buffers the whole (small) File,
+# then goes on offline.
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/listen_to.yaml
+    env:
+      TITLE: Harbor Lights
+- runFlow: subflows/rewind_harbor_lights.yaml
+- extendedWaitUntil:
+    visible:
+      id: player.position
+      text: ".*0:(0[4-9]|[1-5][0-9])"
+    timeout: 30000
+- runFlow: subflows/pause_player.yaml
+- runScript:
+    file: scripts/go_offline.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- extendedWaitUntil:
+    visible:
+      id: player.position
+      text: ".*(0:(2[0-9]|[3-5][0-9])|1:[0-5][0-9])"
+    timeout: 60000
+- runFlow: subflows/pause_player.yaml
+- tapOn:
+    id: player.close
+# The player lets go of the File, so nothing saves a place after the clear.
+- swipe:
+    from:
+      id: miniplayer
+    direction: DOWN
+
+- tapOn:
+    id: tab.home
+- extendedWaitUntil:
+    visible:
+      id: stats.unsynced
+    timeout: 30000
+- runFlow: subflows/home_root.yaml
+# Below the shelves, which other flows' Books can fill.
+- scrollUntilVisible:
+    element:
+      id: reading.history
+    direction: DOWN
+    # In the middle, not peeking out above the tab bar and the offline
+    # notice, where a tap lands on the tab bar instead. The last rows on
+    # Home can't reach the middle, so Maestro keeps swiping a while.
+    centerElement: true
+    timeout: 45000
+- tapOn:
+    id: reading.history
+- extendedWaitUntil:
+    visible:
+      id: history.row
+      text: "(?s).*Harbor Lights.*Not synced yet.*"
+    timeout: 30000
+# Back to the Home tab's first screen while it shows, so it opens there
+# next time.
+- runFlow: subflows/home_root.yaml
+
+# The File's saved place, cleared from its own page. The Library tab is
+# still on the Book's page, where listening started.
+- tapOn:
+    id: tab.library
+- extendedWaitUntil:
+    visible:
+      id: book.detail.title
+      text: Harbor Lights
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "file\\.open\\..*"
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: "file\\.open\\..*"
+- tapOn:
+    id: file.menu
+    retryTapIfNoChange: true
+- tapOn:
+    text: Clear saved position
+    retryTapIfNoChange: true
+- tapOn:
+    id: clearPosition.confirm
+
+# Back online, a refresh syncs, and Reading Stats are fetched again.
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- swipe:
+    start: 50%, 30%
+    end: 50%, 80%
+- runFlow: subflows/home_root.yaml
+- scrollUntilVisible:
+    element:
+      id: reading.stats
+    direction: DOWN
+    # In the middle, not peeking out above the tab bar and the offline
+    # notice, where a tap lands on the tab bar instead. The last rows on
+    # Home can't reach the middle, so Maestro keeps swiping a while.
+    centerElement: true
+    timeout: 45000
+- tapOn:
+    id: reading.stats
+- extendedWaitUntil:
+    notVisible:
+      id: stats.unsynced
+    timeout: 45000
+- copyTextFrom:
+    id: stats.listening
+- evalScript: ${output.shownListening = maestro.copiedText}
+- runScript:
+    file: scripts/assert_stats_synced.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: Offline listening counted once, and the cleared place synced

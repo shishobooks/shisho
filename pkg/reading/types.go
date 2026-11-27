@@ -66,6 +66,11 @@ type SetRatingPayload struct {
 // the Books in libraries the user can reach can reorder those.
 type ReorderToReadPayload struct {
 	BookIDs []int `json:"book_ids" validate:"required,min=1,max=500,dive,min=1"`
+	// MovedBookID is the Book the user dragged, which orders the Shisho
+	// app's late moves against this one (ADR 0024). Without it, the Books
+	// outside the longest run left in order count as moved, which can't
+	// tell a Book dragged one place from its neighbor.
+	MovedBookID *int `json:"moved_book_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 }
 
 // BulkFinishPayload marks each of the named Books read, as marking one
@@ -317,9 +322,13 @@ type ReadingStatsResponse struct {
 type ReadingStatsTotals struct {
 	// Finished counts finished Read-throughs, every reread included, and
 	// Rereads how many of those were of a Book already finished before.
-	Finished     int `json:"finished"`
-	Rereads      int `json:"rereads"`
-	DidNotFinish int `json:"did_not_finish"`
+	Finished int `json:"finished"`
+	Rereads  int `json:"rereads"`
+	// FinishedBooks is how many distinct Books the breakdowns (Genres, Tags,
+	// Authors, Kinds, Ratings) count from: each finished Book once, leaving
+	// out detached Read-throughs. Each breakdown row's share is of this.
+	FinishedBooks int `json:"finished_books"`
+	DidNotFinish  int `json:"did_not_finish"`
 	// ReadingSeconds and ListeningSeconds are Session time, estimated
 	// Sessions included.
 	ReadingSeconds   int `json:"reading_seconds"`
@@ -399,7 +408,10 @@ type ReadingStatsRatingCount struct {
 //
 //nolint:revive // named for the Reading Stats page, as generated TS types are global
 type ReadingStatsPlace struct {
-	Source           string  `json:"source" tstype:"ReadingSource"`
+	Source string `json:"source" tstype:"ReadingSource"`
+	// DeviceID is the Device's id when DeviceName is set, so the Shisho app
+	// knows its own.
+	DeviceID         *string `json:"device_id" tstype:"string | null,required"`
 	DeviceName       *string `json:"device_name" tstype:"string | null,required"`
 	ReadingSeconds   int     `json:"reading_seconds"`
 	ListeningSeconds int     `json:"listening_seconds"`

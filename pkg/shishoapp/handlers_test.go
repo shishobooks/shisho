@@ -29,6 +29,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -97,6 +98,7 @@ func newFixtureFull(t *testing.T, contract *Contract, cache *downloadcache.Cache
 		feed:      changefeed.NewService(db),
 		reading:   reading.NewService(db),
 		bookmarks: bookmarks.NewService(db),
+		lists:     lists.NewService(db),
 		contract:  contract,
 		opts: Options{Contract: contract, ServerVersion: "v0.10.0", InstanceID: testInstanceID, Pages: books.PageImages{
 			Pages:          cbzpages.NewCache(pageDir),

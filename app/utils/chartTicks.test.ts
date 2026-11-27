@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { durationTicks, niceTicks } from "./chartTicks";
+import { durationTicks, niceTicks, roomyTicks } from "./chartTicks";
 
 describe("niceTicks", () => {
   it("rounds the top up to a clean step", () => {
@@ -15,7 +15,25 @@ describe("niceTicks", () => {
   });
 });
 
+describe("roomyTicks", () => {
+  it("adds a step when the most is exactly the top tick", () => {
+    expect(roomyTicks(1)).toEqual([0, 1, 2]);
+    expect(roomyTicks(6)).toEqual([0, 2, 4, 6, 8]);
+  });
+
+  it("keeps niceTicks' ticks when the most is under the top one", () => {
+    expect(roomyTicks(5)).toEqual([0, 2, 4, 6]);
+    expect(roomyTicks(0)).toEqual([0, 1]);
+  });
+});
+
 describe("durationTicks", () => {
+  it("adds a step when the most is a whole tick, if asked", () => {
+    expect(durationTicks(4 * 3600, { roomy: true }).ticks).toEqual(
+      [0, 1, 2, 3, 4, 5].map((h) => h * 3600),
+    );
+  });
+
   it("steps in whole hours from an hour up", () => {
     const axis = durationTicks(7.2 * 3600);
     expect(axis.ticks).toEqual([0, 2, 4, 6, 8].map((h) => h * 3600));

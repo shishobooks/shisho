@@ -335,7 +335,7 @@ func newMeasuredSession(ctx context.Context, tx bun.Tx, userID int, deviceID str
 			if err != nil {
 				return nil, err
 			}
-			rt, err = startReadThrough(ctx, tx, userID, file.BookID, day, now, fileID)
+			rt, err = startReadThrough(ctx, tx, userID, file.BookID, day, now, now, fileID)
 			if err != nil {
 				return nil, err
 			}

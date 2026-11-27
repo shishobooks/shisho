@@ -67,7 +67,7 @@ func (svc *Service) RecordHistoryStatus(ctx context.Context, s DeviceStatus) err
 				return errors.WithStack(err)
 			}
 		case models.ReadingStatusPaused, models.ReadingStatusCurrentlyReading:
-			rt, err := startReadThrough(ctx, tx, s.UserID, bookID, begin, now, s.FileID)
+			rt, err := startReadThrough(ctx, tx, s.UserID, bookID, begin, now, now, s.FileID)
 			if err != nil {
 				return err
 			}

@@ -81,6 +81,7 @@ const emptyStats = (year: number | null): ReadingStatsResponse => ({
   totals: {
     finished: 0,
     rereads: 0,
+    finished_books: 0,
     did_not_finish: 0,
     reading_seconds: 0,
     listening_seconds: 0,
@@ -108,6 +109,7 @@ const busyStats = (year: number | null): ReadingStatsResponse => ({
   totals: {
     finished: 3,
     rereads: 1,
+    finished_books: 2,
     did_not_finish: 1,
     reading_seconds: 7200,
     listening_seconds: 1800,
@@ -140,12 +142,14 @@ const busyStats = (year: number | null): ReadingStatsResponse => ({
   places: [
     {
       source: "kobo",
+      device_id: null,
       device_name: "Bedside Kobo",
       reading_seconds: 3600,
       listening_seconds: 0,
     },
     {
       source: "koreader",
+      device_id: null,
       device_name: null,
       reading_seconds: 600,
       listening_seconds: 0,
@@ -538,6 +542,7 @@ describe("ReadingStatsPage", () => {
         places: [
           {
             source: "web_reader",
+            device_id: null,
             device_name: null,
             reading_seconds: 600,
             listening_seconds: 0,
@@ -545,6 +550,7 @@ describe("ReadingStatsPage", () => {
           // The Shisho app times its listening, as the web player does.
           {
             source: "shisho_app",
+            device_id: null,
             device_name: "iPhone 17 Pro",
             reading_seconds: 0,
             listening_seconds: 900,
@@ -583,10 +589,14 @@ describe("ReadingStatsPage", () => {
         .getAllByRole("button", { pressed: false })
         .map((button) => button.textContent),
     ).toEqual(
-      Array.from(
-        { length: 10 },
-        (_, i) => `Tag 14${i}${formatCount(150 - 140 - i, "book")}`,
-      ),
+      Array.from({ length: 10 }, (_, i) => {
+        // Each row's share of the books it counts from: here the most any
+        // tag has, 150, since the fixture's tags outnumber its books.
+        const books = 150 - 140 - i;
+        const percent = (books / 150) * 100;
+        const share = percent < 1 ? "<1%" : `${Math.round(percent)}%`;
+        return `Tag 14${i}${formatCount(books, "book")} · ${share}`;
+      }),
     );
     await user.click(within(tags).getByRole("button", { name: "Show fewer" }));
     expect(
@@ -755,6 +765,7 @@ describe("ReadingStatsPage", () => {
         places: [
           {
             source: "web_reader",
+            device_id: null,
             device_name: null,
             reading_seconds: 3600,
             listening_seconds: 1200,
@@ -766,10 +777,32 @@ describe("ReadingStatsPage", () => {
       name: "Where you read",
     });
     const rows = within(places).getAllByRole("listitem");
+    // Each place's share of all the time, so the two make a whole.
     expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringMatching(/^Shisho web reader1h 0m reading/),
-      expect.stringMatching(/^Shisho web player20m listening/),
+      expect.stringMatching(/^Shisho web reader1h 0m reading · 75%/),
+      expect.stringMatching(/^Shisho web player20m listening · 25%/),
     ]);
+  });
+
+  it("measures each breakdown row against the books finished", async () => {
+    renderPage({
+      stats: (year) => ({
+        ...busyStats(year),
+        totals: { ...busyStats(year).totals, finished_books: 3 },
+        genres: [
+          { name: "Mystery", books: 2 },
+          { name: "Fantasy", books: 1 },
+        ],
+      }),
+    });
+    const genres = await screen.findByRole("region", { name: "Genres" });
+    // Two mysteries of three books is two thirds, not the whole of the
+    // biggest row.
+    expect(
+      within(genres)
+        .getAllByRole("button", { pressed: false })
+        .map((row) => row.textContent),
+    ).toEqual(["Mystery2 books · 67%", "Fantasy1 book · 33%"]);
   });
 
   describe("heatmap and calendar", () => {

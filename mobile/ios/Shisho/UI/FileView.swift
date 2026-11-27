@@ -19,6 +19,7 @@ struct FileView: View {
     @State private var tint: Color?
     @State private var scrolled = false
     @State private var download: DownloadRow??
+    @State private var clearing: BookDetail.File?
     /// The chapter list's full height, which it's shown at up to
     /// chaptersMaxHeight.
     @State private var chaptersHeight: CGFloat = 0
@@ -72,7 +73,24 @@ struct FileView: View {
                     .opacity(scrolled ? 1 : 0)
                     .accessibilityHidden(!scrolled)
             }
+            if let file, model.offers(.clearPosition), file.progress != nil || (listen ?? nil).map({ $0.seconds > 1 }) == true {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { clearing = file } label: {
+                            Label("Clear saved position", menuIcon: .rotateCcw)
+                        }
+                        .accessibilityIdentifier("file.clearPosition")
+                    } label: {
+                        Icon(.ellipsis, size: 20, relativeTo: nil)
+                            .foregroundStyle(Theme.foreground)
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel(String(localized: "More"))
+                    .accessibilityIdentifier("file.menu")
+                }
+            }
         }
+        .clearPositionConfirmation($clearing)
         .observing(model.session?.store, id: bookID, into: $book) { [bookID] db in
             try CatalogStore.book(db, id: bookID)
         }

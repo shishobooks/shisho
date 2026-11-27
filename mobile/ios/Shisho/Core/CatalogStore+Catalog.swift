@@ -92,6 +92,9 @@ struct Touched {
     var persons = Set<Int>()
     var genres = Set<Int>()
     var tags = Set<Int>()
+    /// The user's reading record changed, so what screens read of it is
+    /// rebuilt.
+    var reading = false
 }
 
 extension CatalogStore {
@@ -256,11 +259,14 @@ extension CatalogStore {
                 """, arguments: [entry.id, entry.libraryId]))
             try db.execute(sql: "DELETE FROM books WHERE id = ? AND library_id = ?", arguments: [entry.id, entry.libraryId])
         case .userBook:
+            touched.reading = true
+            try confirmApplied(book: entry.id, types: userBookTypes, in: db)
             if entry.deleted {
-                try db.execute(sql: "DELETE FROM user_books WHERE book_id = ?", arguments: [entry.id])
+                try db.execute(sql: "DELETE FROM synced_user_books WHERE book_id = ?", arguments: [entry.id])
             } else if let record = entry.userBook {
                 try db.execute(sql: """
-                    INSERT INTO user_books (book_id, rating, to_read_position, reference, page_flow, generation) VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO synced_user_books (book_id, rating, to_read_position, reference, page_flow, generation)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT (book_id) DO UPDATE SET rating = excluded.rating, to_read_position = excluded.to_read_position,
                         reference = excluded.reference, page_flow = excluded.page_flow, generation = excluded.generation
                     """, arguments: [record.bookId, record.rating, record.toReadPosition, record.reference,
@@ -269,6 +275,8 @@ extension CatalogStore {
                 try db.execute(sql: "DELETE FROM chosen_page_flows WHERE book_id = ? AND accepted", arguments: [record.bookId])
             }
         case .list:
+            touched.reading = true
+            try confirmApplied(list: entry.id, localID: entry.list?.localId, in: db)
             if entry.deleted {
                 try dropList(entry.id, in: db)
             } else if let list = entry.list {
@@ -301,17 +309,18 @@ extension CatalogStore {
         let shares = list.shares.map { ListShare(userID: $0.user.id, username: $0.user.username, permission: $0.permission.rawValue) }
         let sharesJSON = (try? String(data: JSONEncoder().encode(shares), encoding: .utf8)) ?? "[]"
         try db.execute(sql: """
-            INSERT INTO lists (id, name, description, is_ordered, default_sort, owner_id, owner_name, permission, shares, generation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (id) DO UPDATE SET name = excluded.name, description = excluded.description,
+            INSERT INTO synced_lists (id, local_id, name, description, is_ordered, default_sort, owner_id, owner_name, permission,
+                shares, generation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (id) DO UPDATE SET local_id = excluded.local_id, name = excluded.name, description = excluded.description,
                 is_ordered = excluded.is_ordered, default_sort = excluded.default_sort, owner_id = excluded.owner_id,
                 owner_name = excluded.owner_name, permission = excluded.permission, shares = excluded.shares,
                 generation = excluded.generation
-            """, arguments: [list.id, list.name, list.description, list.isOrdered, list.defaultSort.rawValue, list.owner.id,
+            """, arguments: [list.id, list.localId, list.name, list.description, list.isOrdered, list.defaultSort.rawValue, list.owner.id,
                              list.owner.username, list.permission.rawValue, sharesJSON, generation])
-        try db.execute(sql: "DELETE FROM list_books WHERE list_id = ?", arguments: [list.id])
+        try db.execute(sql: "DELETE FROM synced_list_books WHERE list_id = ?", arguments: [list.id])
         for (position, book) in list.books.enumerated() {
-            try db.execute(sql: "INSERT INTO list_books (list_id, position, book_id, sort_order, added_at) VALUES (?, ?, ?, ?, ?)",
+            try db.execute(sql: "INSERT INTO synced_list_books (list_id, position, book_id, sort_order, added_at) VALUES (?, ?, ?, ?, ?)",
                            arguments: [list.id, position, book.bookId, book.sortOrder, timestamp(book.addedAt) ?? 0])
         }
     }
@@ -351,7 +360,7 @@ extension CatalogStore {
 
     /// Drops the rows a finished download from the start didn't send.
     static func dropOlderCatalog(before generation: Int, in db: Database) throws {
-        for table in ["series", "persons", "genres", "tags", "publishers", "lists", "user_books"] {
+        for table in ["series", "persons", "genres", "tags", "publishers", "synced_lists", "synced_user_books"] {
             try db.execute(sql: "DELETE FROM \(table) WHERE generation < ?", arguments: [generation])
         }
     }
@@ -457,8 +466,9 @@ extension CatalogStore {
             let recorded = Set(try Int.fetchAll(db, sql: "SELECT library_id FROM library_access"))
             let had = recorded.union(try Int.fetchAll(db, sql: "SELECT id FROM libraries"))
             let lostLibraries = had.subtracting(libraries)
-            for lost in lostLibraries {
-                try CatalogStore.dropLibrary(lost, in: db)
+            var lost = !lostLibraries.isEmpty
+            for library in lostLibraries {
+                try CatalogStore.dropLibrary(library, in: db)
             }
             let gained = libraries.subtracting(recorded)
             let behind = Set(access.behindLibraryIds)
@@ -469,15 +479,19 @@ extension CatalogStore {
             }
             let lists = Set(access.listIds)
             let recordedLists = Set(try Int.fetchAll(db, sql: "SELECT list_id FROM list_access"))
-            let hadLists = recordedLists.union(try Int.fetchAll(db, sql: "SELECT id FROM lists"))
-            for lost in hadLists.subtracting(lists) {
-                try CatalogStore.dropList(lost, in: db)
+            let hadLists = recordedLists.union(try Int.fetchAll(db, sql: "SELECT id FROM synced_lists"))
+            for gone in hadLists.subtracting(lists) {
+                try CatalogStore.dropList(gone, in: db)
+                lost = true
             }
             if !gained.isEmpty || !lostLibraries.isEmpty {
                 try db.execute(sql: "UPDATE list_access SET complete = 0")
             }
             for id in lists.subtracting(recordedLists) {
                 try db.execute(sql: "INSERT OR REPLACE INTO list_access (list_id, complete) VALUES (?, 0)", arguments: [id])
+            }
+            if lost {
+                try CatalogStore.rebuildLayer(db)
             }
         }
     }
@@ -501,9 +515,10 @@ extension CatalogStore {
             try dropLibrary(id, in: db)
         }
         let keepLists = Set(access.listIds)
-        for id in try Int.fetchAll(db, sql: "SELECT id FROM lists") where !keepLists.contains(id) {
+        for id in try Int.fetchAll(db, sql: "SELECT id FROM synced_lists") where !keepLists.contains(id) {
             try dropList(id, in: db)
         }
+        try rebuildLayer(db)
         try db.execute(sql: "UPDATE sync_state SET access_known = 1 WHERE id = 1")
     }
 
@@ -528,6 +543,9 @@ extension CatalogStore {
                 try CatalogStore.applyEntry(entry, generation: generation, ownDeviceID: ownDeviceID, touched: &touched, in: db)
             }
             try CatalogStore.reindex(touched, in: db)
+            if touched.reading {
+                try CatalogStore.rebuildLayer(db)
+            }
             if let libraryID {
                 try db.execute(sql: "UPDATE library_access SET cursor = ?, complete = ? WHERE library_id = ?",
                                arguments: [page.cursor, !page.hasMore, libraryID])
@@ -558,15 +576,16 @@ extension CatalogStore {
     /// Forgets the whole catalog, keeping the journal and this device's own
     /// places, for when the user can't read Books at all.
     static func dropCatalog(in db: Database) throws {
-        for table in ["books", "libraries", "series", "persons", "genres", "tags", "publishers", "lists", "user_books",
+        for table in ["books", "libraries", "series", "persons", "genres", "tags", "publishers", "synced_lists", "synced_user_books",
                       "library_access", "list_access", "books_fts", "series_fts", "persons_fts", "genres_fts", "tags_fts"] {
             try db.execute(sql: "DELETE FROM \(table)")
         }
+        try rebuildLayer(db)
     }
 
     /// Forgets a List deleted, or no longer shared with the user.
     static func dropList(_ id: Int, in db: Database) throws {
-        try db.execute(sql: "DELETE FROM lists WHERE id = ?", arguments: [id])
+        try db.execute(sql: "DELETE FROM synced_lists WHERE id = ?", arguments: [id])
         try db.execute(sql: "DELETE FROM list_access WHERE list_id = ?", arguments: [id])
     }
 

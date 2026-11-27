@@ -32,6 +32,8 @@ name: A Book removed by an access change disappears
 - launchApp:
     stopApp: false
     permissions: {}
+- tapOn:
+    id: tab.library
 - extendedWaitUntil:
     visible: No Books yet
     timeout: 30000
@@ -46,6 +48,8 @@ name: A Book removed by an access change disappears
 - launchApp:
     stopApp: false
     permissions: {}
+- tapOn:
+    id: tab.library
 - extendedWaitUntil:
     visible: The Harness Novel
     timeout: 30000

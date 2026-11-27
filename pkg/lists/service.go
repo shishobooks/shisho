@@ -35,40 +35,7 @@ type CreateListOptions struct {
 }
 
 func (svc *Service) CreateList(ctx context.Context, opts CreateListOptions) (*models.List, error) {
-	now := time.Now()
-
-	defaultSort := opts.DefaultSort
-	if defaultSort == "" {
-		if opts.IsOrdered {
-			defaultSort = models.ListSortManual
-		} else {
-			defaultSort = models.ListSortAddedAtDesc
-		}
-	}
-
-	list := &models.List{
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		UserID:      opts.UserID,
-		Name:        opts.Name,
-		Description: opts.Description,
-		IsOrdered:   opts.IsOrdered,
-		DefaultSort: defaultSort,
-	}
-
-	_, err := svc.db.
-		NewInsert().
-		Model(list).
-		Returning("*").
-		Exec(ctx)
-	if database.IsUniqueViolation(err) {
-		return nil, ErrListNameTaken
-	}
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	return list, nil
+	return CreateListIn(ctx, svc.db, opts, time.Now())
 }
 
 type RetrieveListOptions struct {
@@ -643,26 +610,46 @@ func (svc *Service) RemoveBooks(ctx context.Context, opts RemoveBooksOptions) er
 type ReorderBooksOptions struct {
 	ListID  int
 	BookIDs []int // New order - book IDs in desired sequence
+	// MovedBookID is the Book the user dragged, or nil to work it out from
+	// the orders (reading.MovedInReorder).
+	MovedBookID *int
 }
 
 func (svc *Service) ReorderBooks(ctx context.Context, opts ReorderBooksOptions) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// The Books the reorder moved, rather than shifted, are the ones the
+		// user moved, which order the Shisho app's late moves (ADR 0024).
+		var before []int
+		err := tx.NewSelect().Model((*models.ListBook)(nil)).Column("book_id").
+			Where("list_id = ?", opts.ListID).
+			OrderExpr("sort_order IS NULL, sort_order ASC, added_at DESC, id ASC").
+			Scan(ctx, &before)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		moved := reading.MovedInReorder(before, opts.BookIDs)
+		if opts.MovedBookID != nil {
+			moved = map[int]bool{*opts.MovedBookID: true}
+		}
+		now := time.Now()
 		for i, bookID := range opts.BookIDs {
 			sortOrder := i + 1
-			_, err := tx.NewUpdate().
+			q := tx.NewUpdate().
 				Model((*models.ListBook)(nil)).
 				Set("sort_order = ?", sortOrder).
-				Where("list_id = ? AND book_id = ?", opts.ListID, bookID).
-				Exec(ctx)
-			if err != nil {
+				Where("list_id = ? AND book_id = ?", opts.ListID, bookID)
+			if moved[bookID] {
+				q = q.Set("moved_at = ?", now)
+			}
+			if _, err := q.Exec(ctx); err != nil {
 				return errors.WithStack(err)
 			}
 		}
 
 		// Update list's updated_at
-		_, err := tx.NewUpdate().
+		_, err = tx.NewUpdate().
 			Model((*models.List)(nil)).
-			Set("updated_at = ?", time.Now()).
+			Set("updated_at = ?", now).
 			Where("id = ?", opts.ListID).
 			Exec(ctx)
 		return errors.WithStack(err)
@@ -834,15 +821,19 @@ func (svc *Service) MoveBookToPosition(ctx context.Context, listID, bookID, posi
 		// Insert at new position
 		listBooks = append(listBooks[:newIndex], append([]*models.ListBook{book}, listBooks[newIndex:]...)...)
 
-		// Update all sort orders
+		// Update all sort orders. The Book moved orders the Shisho app's late
+		// moves (ADR 0024).
+		now := time.Now()
 		for i, lb := range listBooks {
 			sortOrder := i + 1
-			_, err := tx.NewUpdate().
+			q := tx.NewUpdate().
 				Model((*models.ListBook)(nil)).
 				Set("sort_order = ?", sortOrder).
-				Where("id = ?", lb.ID).
-				Exec(ctx)
-			if err != nil {
+				Where("id = ?", lb.ID)
+			if lb.ID == book.ID {
+				q = q.Set("moved_at = ?", now)
+			}
+			if _, err := q.Exec(ctx); err != nil {
 				return errors.WithStack(err)
 			}
 		}
@@ -850,7 +841,7 @@ func (svc *Service) MoveBookToPosition(ctx context.Context, listID, bookID, posi
 		// Update list's updated_at
 		_, err = tx.NewUpdate().
 			Model((*models.List)(nil)).
-			Set("updated_at = ?", time.Now()).
+			Set("updated_at = ?", now).
 			Where("id = ?", listID).
 			Exec(ctx)
 		return errors.WithStack(err)

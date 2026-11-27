@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The signed-in app: the Library, Lists, and Downloads tabs of the prototype's native
+/// The signed-in app: the Home, Library, Lists, and Downloads tabs of the prototype's native
 /// structure (variant E), each with its own navigation, the mini player
 /// above the tab bar on every one, and the Account sheet any tab opens.
 struct MainTabs: View {
@@ -13,6 +13,10 @@ struct MainTabs: View {
         // prototype's tab bar sits over it instead of the system's floating
         // one; every screen hides the system's (routeDestinations).
         TabView(selection: Binding(get: { model.tab }, set: { model.tab = $0 })) {
+            HomeView()
+                .withMiniPlayer()
+                .environment(\.appTab, .home)
+                .tag(AppTab.home)
             LibraryView()
                 .withMiniPlayer()
                 .environment(\.appTab, .library)
@@ -36,11 +40,38 @@ struct MainTabs: View {
         // screens still make room for the keyboard themselves.
         .ignoresSafeArea(.keyboard)
         .tint(Theme.primary)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            // The screen the keyboard is on, which the notification names.
+            let showing = KeyboardRules.coversTabBar(note.userInfo, screen: (note.object as? UIScreen)?.bounds,
+                                                     tabBar: AppTabBar.height)
+            guard showing != model.keyboardShowing else { return }
+            withAnimation(.easeOut(duration: 0.25)) { model.keyboardShowing = showing }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.25)) { model.keyboardShowing = false }
+        }
+        // Gone with the tabs, as on signing out while typing.
+        .onDisappear { model.keyboardShowing = false }
         .sheet(isPresented: Binding(get: { model.showingAccount }, set: { model.showingAccount = $0 })) {
             AccountSheet()
         }
     }
 
+}
+
+/// When a keyboard counts as up for the mini player: this app's own, docked
+/// at the bottom of the screen, and tall enough to cover the tab bar. A
+/// hardware keyboard's bar of shortcuts, a floating or split one, and
+/// another app's beside this one leave the tab bar showing.
+enum KeyboardRules {
+    static func coversTabBar(_ info: [AnyHashable: Any]?, screen: CGRect?, tabBar: CGFloat) -> Bool {
+        guard let frame = (info?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue,
+              info?[UIResponder.keyboardIsLocalUserInfoKey] as? Bool ?? true, !frame.isEmpty
+        else { return false }
+        guard let screen else { return frame.height > tabBar + 1 }
+        let docked = frame.maxY >= screen.maxY - 1 && frame.width >= screen.width - 1
+        return docked && screen.maxY - max(frame.minY, screen.minY) > tabBar + 1
+    }
 }
 
 /// The tab bar of the prototype's native structure (variant E): across the
@@ -78,6 +109,7 @@ struct AppTabBar: View {
 
     private var tabs: some View {
         HStack(spacing: 0) {
+            item(.home, String(localized: "Home"), icon: .house, identifier: "tab.home")
             item(.library, String(localized: "Library"), icon: .library, identifier: "tab.library")
             item(.lists, String(localized: "Lists"), icon: .list, identifier: "tab.lists")
             item(.downloads, String(localized: "Downloads"), icon: .download, identifier: "tab.downloads",
@@ -198,6 +230,79 @@ private struct TabPressStyle: ButtonStyle {
     }
 }
 
+/// The logo at the top left of a tab's first screen, as the web's top bar
+/// has it. On Home it shrinks a little as the page scrolls; on the other
+/// tabs the tab's name takes its place once the page's own heading has
+/// scrolled under the bar.
+struct LogoToolbarItem: ToolbarContent {
+    let scrolledBy: CGFloat
+    /// The tab's name, or nil to keep the logo, as Home does.
+    var title: String?
+    /// How far the page scrolls before its heading is under the bar.
+    var titleAfter: CGFloat = 40
+
+    /// Past this, scrolling further changes nothing in the bar.
+    static let settledAfter: CGFloat = 400
+
+    private var showsTitle: Bool { title != nil && scrolledBy > titleAfter }
+
+    private var scale: CGFloat {
+        title == nil ? 1 - 0.18 * min(1, scrolledBy / 48) : 1
+    }
+
+    var body: some ToolbarContent {
+        if #available(iOS 26, *) {
+            ToolbarItem(placement: .topBarLeading) { content }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) { content }
+        }
+    }
+
+    /// How far each slides as they trade places.
+    private static let travel: CGFloat = 14
+
+    /// Both are always there, at a size that doesn't change, and only slide
+    /// and fade, so neither moves sideways as they trade places. They move
+    /// with the page: scrolling down, the logo rises out of view and the
+    /// name rises in from below; scrolling back, the name sinks away and the
+    /// logo comes down from above.
+    private var content: some View {
+        ZStack(alignment: .leading) {
+            Wordmark(size: 26)
+                .fixedSize()
+                .scaleEffect(scale, anchor: .leading)
+                .offset(y: showsTitle ? -Self.travel : 0)
+                .opacity(showsTitle ? 0 : 1)
+            if let title {
+                Text(title)
+                    .font(.geist(.headline, weight: .semibold))
+                    .foregroundStyle(Theme.foreground)
+                    .fixedSize()
+                    .offset(y: showsTitle ? 0 : Self.travel)
+                    .opacity(showsTitle ? 1 : 0)
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: showsTitle)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(showsTitle ? title ?? "Shisho" : "Shisho")
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// A tab's own heading at the top of its first screen, which the bar's
+/// logo gives way to once it scrolls under (LogoToolbarItem).
+struct TabHeading: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.geist(.title2, weight: .semibold))
+            .foregroundStyle(Theme.foreground)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
 /// The top right of each tab's first screen, as the prototype has it:
 /// search, which opens on top of the tab, and the account.
 struct RootToolbar: ToolbarContent {
@@ -267,6 +372,18 @@ private struct RouteDestination: View {
             SearchView()
         case .downloadSettings:
             DownloadSettingsView()
+        case .currentlyReading:
+            CurrentlyReadingView()
+        case .recentReference:
+            RecentReferenceView()
+        case .toRead:
+            ToReadView()
+        case .history:
+            ReadingHistoryView()
+        case .stats:
+            ReadingStatsView()
+        case .statsFinished(let filter, let year):
+            StatsFinishedView(filter: filter, year: year)
         }
     }
 }
@@ -275,16 +392,14 @@ private struct MiniPlayerOverlay: ViewModifier {
     @Environment(AppModel.self) private var model
 
     func body(content: Content) -> some View {
-        // Above the tab bar, and like it, staying put under the keyboard.
-        content.overlay {
-            Color.clear
-                .ignoresSafeArea(.keyboard)
-                .overlay(alignment: .bottom) {
-                    MiniPlayer()
-                        .frame(maxWidth: 680)
-                        .padding(.bottom, AppTabBar.room(model.connection))
-                        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
-                }
+        // Above the tab bar, or with a keyboard up, which covers the bar,
+        // just above the keyboard: the screen's room ends at the keyboard's
+        // top, whatever it holds, so the bar's room would leave a gap.
+        content.overlay(alignment: .bottom) {
+            MiniPlayer()
+                .frame(maxWidth: 680)
+                .padding(.bottom, model.keyboardShowing ? 8 : AppTabBar.room(model.connection))
+                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
         }
     }
 }
@@ -299,8 +414,9 @@ struct BookGrid: View {
     let width: CGFloat
     var badges: [Int: (Double, Double?)] = [:]
     var identifier = "library.grid"
-    /// The Books with a File on the device.
-    @State private var downloaded: Set<Int>?
+    /// Each Book with a Download of any of its Files, for its mark, its
+    /// menu, and which Books open offline.
+    @State private var downloads: [Int: BookDownloads]?
 
     var body: some View {
         let layout = GridLayout(width: width, regular: sizeClass == .regular,
@@ -309,25 +425,29 @@ struct BookGrid: View {
         // Read here in body: a lazy grid builds its cells outside body, so
         // state read only in a cell doesn't redraw it when it changes.
         let connection = model.connection
-        let downloaded = downloaded
+        let downloads = downloads
+        let downloaded = downloads.map { Set($0.values.filter(\.hasDownloaded).map(\.bookID)) }
         LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
             ForEach(books) { book in
                 let onDevice = !ConnectionRules.dimmed(bookID: book.id, connection: connection, downloaded: downloaded)
+                let isDownloaded = downloaded?.contains(book.id) == true
                 NavigationLink(value: Route.book(book)) {
-                    BookCell(book: book, width: layout.cellWidth, seriesNumber: badges[book.id])
+                    BookCell(book: book, width: layout.cellWidth, seriesNumber: badges[book.id], downloaded: isDownloaded,
+                             downloads: downloads?[book.id])
                         // Without the server, a Book with nothing downloaded
                         // can't be listened to or read: dimmed, though its
                         // page still opens.
                         .opacity(onDevice ? 1 : 0.5)
                 }
                 .buttonStyle(PressableStyle())
+                .bookDownloadMenu(book: book, downloads: downloads?[book.id])
                 .accessibilityHint(onDevice ? "" : String(localized: "Not downloaded"))
             }
         }
         .padding(.horizontal, GridLayout.margin)
         .accessibilityIdentifier(identifier)
-        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloaded) { db in
-            try CatalogStore.downloadedBookIDs(db)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloads) { db in
+            try CatalogStore.booksDownloads(db)
         }
     }
 }

@@ -11,6 +11,9 @@ struct LibraryView: View {
     @State private var libraries: [LibrarySummary]?
     /// How far the content has scrolled up, which shrinks the logo.
     @State private var scrolledBy: CGFloat = 0
+    /// Where the Library's heading sits in the page, which moves with the
+    /// picker's wrapping, the banners above it, and the text size.
+    @State private var headingTop: CGFloat = 110
     @State private var notes: [JournalNote]?
     /// The sort saved on the web for the Library showing.
     @State private var savedSort: String?
@@ -66,6 +69,9 @@ struct LibraryView: View {
                         }
                         if let books {
                             sectionHeader(count: books.count)
+                                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("libraryContent")).minY } action: {
+                                    headingTop = $0
+                                }
                             if books.isEmpty, !model.filter.isEmpty {
                                 VStack(spacing: 14) {
                                     EmptyNotice(title: String(localized: "No Books match these filters"),
@@ -83,8 +89,14 @@ struct LibraryView: View {
                         }
                     }
                     .padding(.bottom, 32)
+                    .coordinateSpace(.named("libraryContent"))
                 }
-                .onScrolledDistanceChange(space: "library") { scrolledBy = $0 }
+                .onScrolledDistanceChange(space: "library") { distance in
+                    // Only as far as the bar's logo or title changes, so the
+                    // page isn't redrawn on every frame of a long scroll.
+                    let settled = min(LogoToolbarItem.settledAfter, distance)
+                    if settled != scrolledBy { scrolledBy = settled }
+                }
                 .miniPlayerClearance()
                 .onChange(of: model.scrollToTop[.library]) { _, _ in
                     withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
@@ -95,7 +107,9 @@ struct LibraryView: View {
             .refreshable { await model.syncNow() }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                LogoToolbarItem(scrolledBy: scrolledBy)
+                // Once the Library's heading, under its picker and browse
+                // links, has scrolled under the bar.
+                LogoToolbarItem(scrolledBy: scrolledBy, title: String(localized: "Library"), titleAfter: headingTop + 20)
                 RootToolbar()
             }
             .routeDestinations()
@@ -234,31 +248,6 @@ private struct LibraryPicker: View {
     }
 }
 
-/// The logo at the top left, shrinking a little as the Library scrolls.
-private struct LogoToolbarItem: ToolbarContent {
-    let scrolledBy: CGFloat
-
-    private var scale: CGFloat {
-        1 - 0.18 * min(1, scrolledBy / 48)
-    }
-
-    var body: some ToolbarContent {
-        if #available(iOS 26, *) {
-            ToolbarItem(placement: .topBarLeading) { logo }
-                .sharedBackgroundVisibility(.hidden)
-        } else {
-            ToolbarItem(placement: .topBarLeading) { logo }
-        }
-    }
-
-    private var logo: some View {
-        Wordmark(size: 26)
-            .fixedSize()
-            .scaleEffect(scale, anchor: .leading)
-            .accessibilityAddTraits(.isHeader)
-    }
-}
-
 /// The signed-in account, top right, as the user's initial.
 struct AccountButton: View {
     @Environment(AppModel.self) private var model
@@ -282,6 +271,11 @@ struct BookCell: View {
     /// The Book's Series Number, on a Series' page, inline with the title so
     /// the title wraps under it, as the web gallery shows it.
     var seriesNumber: (Double, Double?)?
+    /// A File of the Book is downloaded to this device.
+    var downloaded = false
+    /// The Book's Downloads, from `CatalogStore.booksDownloads`, which add
+    /// a ring filling while its Files download; nil shows only downloaded.
+    var downloads: BookDownloads?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -300,6 +294,10 @@ struct BookCell: View {
                         CoverRatingBadge(units: rating)
                             .padding(4)
                     }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    BookDownloadMark(downloads: downloads, downloaded: downloaded)
+                        .padding(8)
                 }
                 .padding(.bottom, book.progress == nil ? 4 : 0)
             if let progress = book.progress {
@@ -330,7 +328,7 @@ struct BookCell: View {
         .frame(width: width, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityText)
+        .modifier(BookDownloadLabel(label: accessibilityText, downloads: downloads, downloaded: downloaded))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("book.cell")
     }

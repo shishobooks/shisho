@@ -102,6 +102,47 @@ struct CoverRatingBadge: View {
     }
 }
 
+/// The mark on a cover whose Book has a File downloaded to this device, as
+/// the prototype flags one, so what plays and opens offline shows at a
+/// glance. The cell around it says "Downloaded" to VoiceOver.
+struct CoverDownloadBadge: View {
+    var body: some View {
+        Icon(.arrowDownToLine, size: 10, relativeTo: nil)
+            .foregroundStyle(Theme.foreground)
+            .frame(width: 18, height: 18)
+            .background(Theme.secondary, in: Circle())
+            .accessibilityHidden(true)
+    }
+}
+
+/// The download badge's place while a Book's Files download: a ring the
+/// same size, filling from 0 to 1, or turning while nothing is known yet.
+/// It gives way to `CoverDownloadBadge` once they're here. The cell around
+/// it says how far it has got to VoiceOver.
+struct CoverDownloadProgress: View {
+    let fraction: Double?
+    @State private var turning = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Theme.foreground.opacity(0.15), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: fraction.map { max(0.04, min(1, $0)) } ?? 0.25)
+                .stroke(Theme.primary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(fraction == nil && turning ? 270 : -90))
+                .animation(fraction == nil ? .linear(duration: 1).repeatForever(autoreverses: false) : .easeOut(duration: 0.2),
+                           value: fraction == nil && turning)
+                .animation(.easeOut(duration: 0.2), value: fraction)
+        }
+        .padding(3)
+        .frame(width: 18, height: 18)
+        .background(Theme.secondary, in: Circle())
+        .onAppear { turning = true }
+        .accessibilityHidden(true)
+    }
+}
+
 /// How far through a Book or File the user is, as a thin bar.
 struct ProgressBar: View {
     let value: Double

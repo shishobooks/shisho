@@ -5,6 +5,8 @@ import SwiftUI
 struct ListsView: View {
     @Environment(AppModel.self) private var model
     @State private var lists: [ListSummary]?
+    @State private var making = false
+    @State private var scrolledBy: CGFloat = 0
 
     var body: some View {
         @Bindable var model = model
@@ -12,16 +14,21 @@ struct ListsView: View {
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    ScrollTopMarker(space: "lists")
+                        .id(ScrollTop.anchor)
+                    TabHeading(title: String(localized: "Lists"))
+                        .padding(.horizontal, GridLayout.margin)
+                        .padding(.top, 4)
                     Text("Organize your books into custom collections")
                         .font(.geist(.subheadline))
                         .foregroundStyle(Theme.mutedForeground)
                         .padding(.horizontal, GridLayout.margin)
+                        .padding(.top, 2)
                         .padding(.bottom, 16)
-                        .id(ScrollTop.anchor)
                     if let lists {
                         if lists.isEmpty {
                             EmptyNotice(title: String(localized: "No Lists yet"),
-                                        message: String(localized: "Lists you make on the web, and Lists shared with you, appear here."),
+                                        message: String(localized: "Lists you make, and Lists shared with you, appear here."),
                                         icon: .list)
                                 .accessibilityIdentifier("lists.empty")
                         }
@@ -41,6 +48,12 @@ struct ListsView: View {
                 .frame(maxWidth: 680)
                 .frame(maxWidth: .infinity)
             }
+            .onScrolledDistanceChange(space: "lists") { distance in
+                    // Only as far as the bar's logo or title changes, so the
+                    // page isn't redrawn on every frame of a long scroll.
+                    let settled = min(LogoToolbarItem.settledAfter, distance)
+                    if settled != scrolledBy { scrolledBy = settled }
+                }
             .miniPlayerClearance()
             .onChange(of: model.scrollToTop[.lists]) { _, _ in
                 withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
@@ -48,10 +61,30 @@ struct ListsView: View {
             }
             .background(Theme.background)
             .refreshable { await model.syncNow() }
-            .navigationTitle("Lists")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar { RootToolbar() }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                LogoToolbarItem(scrolledBy: scrolledBy, title: String(localized: "Lists"))
+                if model.offers(.lists) {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { making = true } label: {
+                            Icon(.plus, size: 20, relativeTo: nil)
+                                .foregroundStyle(Theme.foreground)
+                                .frame(minWidth: 44, minHeight: 44)
+                        }
+                        .accessibilityLabel(String(localized: "New List"))
+                        .accessibilityIdentifier("lists.new")
+                    }
+                }
+                RootToolbar()
+            }
             .routeDestinations()
+            .sheet(isPresented: $making) {
+                ListFormSheet(title: String(localized: "New List")) { name, ordered in
+                    if let id = model.change(.createList(name: name, description: nil, ordered: ordered)) {
+                        model.push(.list(id: id, name: name))
+                    }
+                }
+            }
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $lists) { db in
             try CatalogStore.lists(db)
@@ -110,6 +143,28 @@ struct ListDetailView: View {
     @State private var list: ListSummary??
     @State private var books: [BookSummary]?
     @State private var downloadable: DownloadAllButton.Files?
+    @State private var abilities: ListAbilities?
+    /// The List's id now: a List made here and not synced yet has a
+    /// temporary one until the feed brings the server's, found by the id
+    /// this installation made it under.
+    @State private var resolvedID: Int?
+    @State private var localID: String?
+    private var shownID: Int { resolvedID ?? listID }
+    @State private var editing = false
+    @State private var renaming = false
+    @State private var confirmingDelete = false
+
+    /// What the user may do with the List here.
+    struct ListAbilities: Equatable, Sendable {
+        var ordered: Bool
+        var permission: String
+    }
+
+    private var canEditBooks: Bool {
+        model.offers(.lists) && ["owner", "editor", "manager"].contains(abilities?.permission ?? "")
+    }
+    private var canRename: Bool { model.offers(.lists) && ["owner", "manager"].contains(abilities?.permission ?? "") }
+    private var canDelete: Bool { model.offers(.lists) && abilities?.permission == "owner" }
 
     var body: some View {
         GeometryReader { geometry in
@@ -153,22 +208,86 @@ struct ListDetailView: View {
         .background(Theme.background)
         .refreshable { await model.syncNow() }
         .navigationTitle((list ?? nil)?.name ?? initialName)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let downloadable, !downloadable.fileIDs.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     DownloadAllButton(files: downloadable)
                 }
             }
+            if canEditBooks || canRename || canDelete {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        if canEditBooks, !(books ?? []).isEmpty {
+                            Button { editing = true } label: {
+                                Label(abilities?.ordered == true ? "Reorder or Remove Books" : "Remove Books", menuIcon: .gripVertical)
+                            }
+                            .accessibilityIdentifier("list.edit")
+                        }
+                        if canRename {
+                            Button { renaming = true } label: { Label("Rename", menuIcon: .pencil) }
+                                .accessibilityIdentifier("list.rename")
+                        }
+                        if canDelete {
+                            Button(role: .destructive) { confirmingDelete = true } label: { Label("Delete List", menuIcon: .trash) }
+                                .accessibilityIdentifier("list.delete")
+                        }
+                    } label: {
+                        Icon(.ellipsis, size: 20, relativeTo: nil)
+                            .foregroundStyle(Theme.foreground)
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel(String(localized: "List actions"))
+                    .accessibilityIdentifier("list.menu")
+                }
+            }
         }
-        .observing(model.session?.store, id: listID, into: $downloadable) { [listID] db in
-            try DownloadAllButton.Files.fetch(db, listID: listID)
+        .sheet(isPresented: $editing) {
+            ListEditSheet(listID: shownID, ordered: abilities?.ordered ?? false)
         }
-        .observing(model.session?.store, id: listID, into: $list) { [listID] db in
-            try CatalogStore.list(db, id: listID)
+        .sheet(isPresented: $renaming) {
+            ListFormSheet(title: String(localized: "Rename List"), name: (list ?? nil)?.name ?? initialName, asksOrdered: false) { name, _ in
+                model.change(.renameList(id: shownID, name: name))
+            }
         }
-        .observing(model.session?.store, id: listID, into: $books) { [listID] db in
-            try CatalogStore.listBooks(db, listID: listID)
+        .alert(String(localized: "Delete this List?"), isPresented: $confirmingDelete) {
+            Button(String(localized: "Delete"), role: .destructive) {
+                model.change(.deleteList(id: shownID))
+                model.popToRoot(.lists)
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text("The List goes for everyone it's shared with. The Books in it stay in your Libraries.")
+        }
+        .task(id: listID) {
+            guard listID < 0 else { return }
+            // From the List, or from the change that made it, should the feed
+            // have brought the server's already.
+            localID = try? await model.session?.store.pool.read { [listID] db in
+                try String.fetchOne(db, sql: "SELECT local_id FROM lists WHERE id = ?", arguments: [listID])
+                    ?? String.fetchOne(db, sql: """
+                        SELECT json_extract(CAST(payload AS TEXT), '$.local_id') FROM journal WHERE seq = ? AND type = 'list_create'
+                        UNION ALL
+                        SELECT json_extract(CAST(payload AS TEXT), '$.local_id') FROM journal_applied WHERE seq = ? AND type = 'list_create'
+                        """, arguments: [-listID, -listID])
+            }
+        }
+        .observing(model.session?.store, id: localID ?? "", into: $resolvedID) { [localID, listID] db in
+            guard let localID else { return listID }
+            return try Int.fetchOne(db, sql: "SELECT id FROM lists WHERE local_id = ? ORDER BY id DESC LIMIT 1", arguments: [localID]) ?? listID
+        }
+        .observing(model.session?.store, id: shownID, into: $abilities) { [shownID] db in
+            try CatalogStore.listAbilities(db, listID: shownID).map { ListAbilities(ordered: $0.ordered, permission: $0.permission) }
+                ?? ListAbilities(ordered: false, permission: "")
+        }
+        .observing(model.session?.store, id: shownID, into: $downloadable) { [shownID] db in
+            try DownloadAllButton.Files.fetch(db, listID: shownID)
+        }
+        .observing(model.session?.store, id: shownID, into: $list) { [shownID] db in
+            try CatalogStore.list(db, id: shownID)
+        }
+        .observing(model.session?.store, id: shownID, into: $books) { [shownID] db in
+            try CatalogStore.listBooks(db, listID: shownID)
         }
     }
 }
@@ -192,5 +311,66 @@ enum SharePermission {
         case "manager": String(localized: "can manage")
         default: permission
         }
+    }
+}
+
+/// A List's Books to remove, and in an ordered List, to drag into a new
+/// order, offline or not. The latest move of each Book wins when it syncs.
+private struct ListEditSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let listID: Int
+    let ordered: Bool
+
+    @State private var books: [BookSummary]?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(Array((books ?? []).enumerated()), id: \.element.id) { index, book in
+                    BookRow(book: book, place: ordered ? index + 1 : nil)
+                        .accessibilityIdentifier("list.edit.row")
+                        .accessibilityActions {
+                            if ordered, index > 0 {
+                                Button(String(localized: "Move up")) { move(from: index, to: index - 1) }
+                            }
+                            if ordered, index < (books?.count ?? 0) - 1 {
+                                Button(String(localized: "Move down")) { move(from: index, to: index + 1) }
+                            }
+                            Button(String(localized: "Remove from List")) { model.change(.removeFromList(id: listID, book: book.id)) }
+                        }
+                }
+                .onMove(perform: ordered ? { source, destination in
+                    guard let from = source.first else { return }
+                    move(from: from, to: destination > from ? destination - 1 : destination)
+                } : nil)
+                .onDelete { offsets in
+                    for index in offsets {
+                        if let book = books?[index] { model.change(.removeFromList(id: listID, book: book.id)) }
+                    }
+                }
+            }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle(ordered ? String(localized: "Reorder or Remove") : String(localized: "Remove Books"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "Done")) { dismiss() }
+                        .accessibilityIdentifier("list.edit.done")
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
+        .observing(model.session?.store, id: listID, into: $books) { [listID] db in
+            // The manual order when it has one, which this sheet changes.
+            let order = try CatalogStore.listOrder(db, listID: listID)
+            let byID = Dictionary(try CatalogStore.listBooks(db, listID: listID).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            return order.compactMap { byID[$0] }
+        }
+    }
+
+    private func move(from: Int, to: Int) {
+        guard let move = ReadingLayer.move(in: books?.map(\.id) ?? [], from: from, to: to) else { return }
+        model.change(.moveInList(id: listID, book: move.book, after: move.after))
     }
 }
