@@ -333,7 +333,7 @@ final class ReadingCalendarStoreTests: XCTestCase {
         let month = Shishoapp.StatsCalendarResponse(year: 2027, month: 1)
         try store.saveCalendar(month, key: .month(year: 2027, month: 1), fetchedAt: Date().addingTimeInterval(-60))
         try listen("sit-2", seconds: 600, from: start)
-        // The sync notes the session's days as it sends it.
+        // The sync notes, as it sends it, that the calendar can change.
         try store.markCalendarStale(store.pendingJournal(capabilities: "", limit: 500))
         try answerAccepted()
         func shownSeconds() throws -> Int? {
@@ -344,6 +344,9 @@ final class ReadingCalendarStoreTests: XCTestCase {
         let stats = try store.pool.read { try XCTUnwrap(CatalogStore.stats($0, year: nil, ownDeviceID: "me")) }.stats
         try store.saveStats(stats, year: nil, fetchedAt: Date())
         XCTAssertEqual(try store.calendarCopiesToRefresh(), [.month(year: 2027, month: 1)])
+        // A sync that couldn't fetch it leaves the session laid over it.
+        try store.statsCaughtUp()
+        XCTAssertEqual(try shownSeconds(), 600, "still laid over the copy that doesn't count it")
         // Fetched again, the month counts the session itself.
         var fetched = month
         fetched.books = [Shishoapp.StatsBookRef(key: "book-1", title: "Book 1", bookId: 1)]

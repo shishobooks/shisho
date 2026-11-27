@@ -3,52 +3,25 @@ import ShishoAPI
 import XCTest
 @testable import Shisho
 
-/// A sync fetches again each calendar copy showing a day the changes it sent
-/// fall on, so the copy counts them before Reading Stats stop laying them
-/// over it, and drops every copy when Reading Stats move to another time
-/// zone.
-final class ReadingCalendarStaleDaysTests: XCTestCase {
-    private let chicago = TimeZone(identifier: "America/Chicago")!
-
+/// What makes a sync fetch the calendar's copies again, and how a session
+/// splits across days.
+final class ReadingCalendarStaleTests: XCTestCase {
     private func row(_ type: Shishoapp.JournalEventType, _ payload: some Encodable, at: Date = Date()) throws -> JournalRow {
         JournalRow(seq: 1, eventID: UUID().uuidString, type: type.rawValue, at: at, payload: try JSONEncoder().encode(payload))
     }
 
-    private func session(_ start: String, _ end: String) throws -> JournalRow {
-        try row(.readingSession, Shishoapp.JournalSessionPayload(sessionId: "sit", fileId: 10, startedAt: start, endedAt: end,
-                                                                startPercentage: 0, endPercentage: 0.5))
-    }
-
-    func testASessionPastMidnightTouchesBothDaysInTheServersZone() throws {
-        // 11:40 PM to 12:20 AM in Chicago.
-        let late = try session("2026-11-11T05:40:00Z", "2026-11-11T06:20:00Z")
-        XCTAssertEqual(CalendarLayering.touchedDays([late], zone: chicago, endDays: [:]), ["2026-11-10", "2026-11-11"])
-        XCTAssertEqual(CalendarLayering.touchedDays([late], zone: TimeZone(identifier: "UTC")!, endDays: [:]), ["2026-11-11"])
-    }
-
-    func testAFinishOrAbandonTouchesItsDayAndADeleteTheDayItEnded() throws {
-        let finish = try row(.readThroughFinish, Shishoapp.JournalBookPayload(bookId: 2, day: "2026-11-12"))
-        let abandon = try row(.readThroughAbandon, Shishoapp.JournalBookPayload(bookId: 3, day: "2026-11-13"))
-        let deleted = try row(.readThroughDelete, Shishoapp.JournalReadThroughDeletePayload(readThroughId: 7, day: "2026-11-20"))
-        // The one underway has no finish on the calendar.
-        let underway = try row(.readThroughDelete, Shishoapp.JournalReadThroughDeletePayload(bookId: 4, day: "2026-11-20"))
-        let position = try row(.readingPosition, Shishoapp.JournalPositionPayload())
-        XCTAssertEqual(CalendarLayering.touchedDays([finish, abandon, deleted, underway, position], zone: chicago,
-                                                    endDays: [7: "2026-10-01"]),
-                       ["2026-11-12", "2026-11-13", "2026-10-01"])
-    }
-
-    func testACopyIsStaleWhenItShowsATouchedDay() {
-        XCTAssertTrue(CalendarCacheKey.day("2026-11-12").covers("2026-11-12"))
-        XCTAssertFalse(CalendarCacheKey.day("2026-11-12").covers("2026-11-13"))
-        XCTAssertTrue(CalendarCacheKey.month(year: 2026, month: 11).covers("2026-11-30"))
-        XCTAssertFalse(CalendarCacheKey.month(year: 2026, month: 11).covers("2026-12-01"))
-        XCTAssertTrue(CalendarCacheKey.heatmap(year: 2026).covers("2026-01-01"))
-        XCTAssertFalse(CalendarCacheKey.heatmap(year: 2026).covers("2027-01-01"))
-        // The last 12 months move on to today, so they show every day from
-        // the copy's first on, later ones included.
-        XCTAssertTrue(CalendarCacheKey.heatmap(year: nil).covers("2026-12-05", heatmapFrom: "2025-11-21"))
-        XCTAssertFalse(CalendarCacheKey.heatmap(year: nil).covers("2025-11-20", heatmapFrom: "2025-11-21"))
+    func testReadingChangesAndPositionsNearTheEndCanChangeTheCalendar() throws {
+        let session = try row(.readingSession, Shishoapp.JournalSessionPayload(sessionId: "sit", fileId: 10, startedAt: "2026-11-11T05:40:00Z",
+                                                                               endedAt: "2026-11-11T06:20:00Z", startPercentage: 0, endPercentage: 0.5))
+        XCTAssertTrue(CatalogStore.changesCalendar(session))
+        XCTAssertTrue(CatalogStore.changesCalendar(try row(.readThroughFinish, Shishoapp.JournalBookPayload(bookId: 2, day: "2026-11-12"))))
+        XCTAssertTrue(CatalogStore.changesCalendar(try row(.readThroughDelete, Shishoapp.JournalReadThroughDeletePayload(readThroughId: 7))))
+        XCTAssertTrue(CatalogStore.changesCalendar(try row(.referenceMark, Shishoapp.JournalBookPayload(bookId: 2))))
+        // A position at the end can finish a Read-through on the server.
+        XCTAssertTrue(CatalogStore.changesCalendar(try row(.readingPosition, Shishoapp.JournalPositionPayload(fileId: 10, percentage: 0.4, atEnd: true))))
+        XCTAssertTrue(CatalogStore.changesCalendar(try row(.readingPosition, Shishoapp.JournalPositionPayload(fileId: 10, percentage: 0.95))))
+        XCTAssertFalse(CatalogStore.changesCalendar(try row(.readingPosition, Shishoapp.JournalPositionPayload(fileId: 10, percentage: 0.4))))
+        XCTAssertFalse(CatalogStore.changesCalendar(try row(.ratingSet, Shishoapp.JournalRatingPayload(bookId: 2, rating: 4))))
     }
 
     func testAKeyReadsBackFromItsRaw() {
@@ -124,35 +97,48 @@ final class ReadingCalendarRefreshStoreTests: XCTestCase {
         try store.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM \(table)") ?? 0 }
     }
 
-    func testTheCopiesShowingASentSessionsDayAreFetchedAgain() throws {
-        let heatmap = Shishoapp.StatsHeatmapResponse(today: "2027-01-14", from: "2026-01-15", to: "2027-01-14")
-        try store.saveCalendar(heatmap, key: .heatmap(year: nil), fetchedAt: start)
-        try store.saveCalendar(Shishoapp.StatsHeatmapResponse(), key: .heatmap(year: 2027), fetchedAt: start)
-        try store.saveCalendar(Shishoapp.StatsHeatmapResponse(), key: .heatmap(year: 2026), fetchedAt: start)
-        try store.saveCalendar(Shishoapp.StatsCalendarResponse(year: 2027, month: 1), key: .month(year: 2027, month: 1), fetchedAt: start)
+    func testEveryCopyIsFetchedAgainOnceAChangeThatCanAlterItWasSent() throws {
+        try store.saveCalendar(Shishoapp.StatsHeatmapResponse(), key: .heatmap(year: nil), fetchedAt: start)
         try store.saveCalendar(Shishoapp.StatsCalendarResponse(year: 2026, month: 12), key: .month(year: 2026, month: 12), fetchedAt: start)
-        try store.saveCalendar(Shishoapp.StatsDayResponse(day: "2027-01-15", timeZone: "UTC"), key: .day("2027-01-15"), fetchedAt: start)
-        try store.saveCalendar(Shishoapp.StatsDayResponse(day: "2027-01-14", timeZone: "UTC"), key: .day("2027-01-14"), fetchedAt: start)
+        try store.saveCalendar(Shishoapp.StatsDayResponse(day: "2020-01-01", timeZone: "UTC"), key: .day("2020-01-01"), fetchedAt: start)
         XCTAssertEqual(try store.calendarCopiesToRefresh(), [], "nothing sent, nothing stale")
 
+        // The server decides which days a change lands on, so every copy
+        // goes stale, a day years before the session included.
         try listen("sit-1", seconds: 600, from: start)
         try store.markCalendarStale(pending())
-        XCTAssertEqual(Set(try store.calendarCopiesToRefresh()),
-                       [.heatmap(year: nil), .heatmap(year: 2027), .month(year: 2027, month: 1), .day("2027-01-15")],
-                       "the last 12 months too, which move on to the 15th though its copy ends on the 14th")
+        XCTAssertEqual(Set(try store.calendarCopiesToRefresh()), [.heatmap(year: nil), .month(year: 2026, month: 12), .day("2020-01-01")])
 
         try store.calendarRefreshed(before: Date().addingTimeInterval(1))
         XCTAssertEqual(try store.calendarCopiesToRefresh(), [])
-        XCTAssertEqual(try count("calendar_cache"), 7, "fetching again doesn't drop copies")
+        XCTAssertEqual(try count("calendar_cache"), 3, "fetching again doesn't drop copies")
     }
 
-    func testAFinishMakesItsDaysCopyStale() throws {
-        try store.record(.finish(book: 2), at: start)
-        let endDay = try XCTUnwrap(store.pool.read { try String.fetchOne($0, sql: "SELECT end_day FROM read_throughs WHERE book_id = 2") })
-        try store.saveCalendar(Shishoapp.StatsDayResponse(day: endDay, timeZone: "UTC"), key: .day(endDay), fetchedAt: start)
-        try store.saveCalendar(Shishoapp.StatsDayResponse(day: "2020-01-01", timeZone: "UTC"), key: .day("2020-01-01"), fetchedAt: start)
-        try store.markCalendarStale(pending())
-        XCTAssertEqual(try store.calendarCopiesToRefresh(), [.day(endDay)])
+    func testTheDeviceKeepsTheCopiesTheCalendarShowedLast() throws {
+        for day in 1...12 {
+            let key = String(format: "2026-03-%02d", day)
+            try store.saveCalendar(Shishoapp.StatsDayResponse(day: key, timeZone: "UTC"), key: .day(key), fetchedAt: start)
+        }
+        let kept = try store.pool.read { try String.fetchAll($0, sql: "SELECT cache_key FROM calendar_cache ORDER BY cache_key") }
+        XCTAssertEqual(kept, (3...12).map { String(format: "day:2026-03-%02d", $0) })
+
+        // A sync's copy doesn't count as shown, nor replace a newer one.
+        try store.saveCalendar(Shishoapp.StatsDayResponse(day: "2026-03-03", timeZone: "UTC", sessions: []), key: .day("2026-03-03"),
+                               fetchedAt: start.addingTimeInterval(-60), viewed: false)
+        let fetched = try store.pool.read { try Double.fetchOne($0, sql: "SELECT fetched_at FROM calendar_cache WHERE cache_key = 'day:2026-03-03'") }
+        XCTAssertEqual(fetched, start.timeIntervalSince1970)
+    }
+
+    func testADayCopyLaysThisDevicesReadingInItsOwnTimeZone() throws {
+        // 11:40 PM in Chicago, the 14th, though 5:40 AM on the 15th in UTC,
+        // which Reading Stats still say.
+        try store.saveCalendar(Shishoapp.StatsDayResponse(day: "2027-01-14", timeZone: "America/Chicago"), key: .day("2027-01-14"),
+                               fetchedAt: start, zone: "America/Chicago")
+        try listen("sit-1", seconds: 600, from: Date(timeIntervalSince1970: try XCTUnwrap(CatalogStore.timestamp("2027-01-15T05:40:00Z"))))
+        let shown = try XCTUnwrap(store.pool.read {
+            try CatalogStore.calendarDay($0, day: "2027-01-14", ownDeviceID: "me", deviceName: "iPhone")
+        })
+        XCTAssertEqual(shown.value.response.sessions.count, 1)
     }
 
     func testReadingStatsInAnotherTimeZoneDropEveryCopy() throws {
@@ -171,8 +157,7 @@ final class ReadingCalendarRefreshStoreTests: XCTestCase {
         XCTAssertEqual(try count("calendar_cache"), 1)
     }
 
-    func testReadingStatsCatchUpAtTheirOwnCopyWhateverTheCalendarHolds() throws {
-        // A day seen long ago holds nothing back.
+    func testACalendarCopyHoldsBackWhatItDoesntCountWhileTheCalendarShows() throws {
         try store.saveCalendar(Shishoapp.StatsDayResponse(day: "2026-01-01", timeZone: "UTC"), key: .day("2026-01-01"),
                                fetchedAt: Date().addingTimeInterval(-90 * 86400))
         try listen("sit-1", seconds: 600, from: start)
@@ -182,6 +167,10 @@ final class ReadingCalendarRefreshStoreTests: XCTestCase {
         XCTAssertEqual(try count("unstated_sessions"), 1)
         try store.saveStats(stats(zone: "UTC"), year: nil, fetchedAt: Date())
         try store.statsCaughtUp()
+        XCTAssertEqual(try count("unstated_sessions"), 1, "the copy, not fetched again, doesn't count it")
+
+        // A server without the Calendar hides it, so it holds nothing back.
+        try store.statsCaughtUp(calendarHolds: false)
         XCTAssertEqual(try count("unstated_sessions"), 0)
         let counted = try store.pool.read { try Double.fetchOne($0, sql: "SELECT seconds FROM counted_sessions WHERE session_id = 'sit-1'") }
         XCTAssertEqual(counted, 600)

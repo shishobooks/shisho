@@ -4,8 +4,7 @@ import ShishoAPI
 
 /// One snapshot of a sitting's Reading Session made on this device: waiting
 /// in the journal, or taken in by the server and kept in unstated_sessions
-/// until every copy of Reading Stats counts it. The calendar's copies count
-/// it by then too: the sync fetches again each one showing its days.
+/// until every copy of Reading Stats and the Calendar counts it.
 struct SessionSnapshot: Equatable, Sendable {
     let eventID: String
     let payload: Shishoapp.JournalSessionPayload

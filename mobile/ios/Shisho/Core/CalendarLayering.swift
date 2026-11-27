@@ -71,38 +71,6 @@ enum CalendarLayering {
         return UnsyncedReading.splitByDay(start: session.uncountedStart, end: session.endedAt, seconds: added, zone: zone)
     }
 
-    /// The days of zone the changes in rows touch on the calendar: every day
-    /// a Reading Session falls on, split at midnight as the server splits
-    /// it, and the day a Read-through is finished or abandoned on, or, for
-    /// one deleted, the day it ended (endDays, by its id).
-    static func touchedDays(_ rows: [JournalRow], zone: TimeZone, endDays: [Int: String]) -> Set<String> {
-        let decoder = makeShishoDecoder()
-        var days = Set<String>()
-        for row in rows {
-            switch Shishoapp.JournalEventType(rawValue: row.type) {
-            case .readingSession:
-                guard let session = try? decoder.decode(Shishoapp.JournalSessionPayload.self, from: row.payload),
-                      let started = CatalogStore.timestamp(session.startedAt) else { continue }
-                let start = Date(timeIntervalSince1970: started)
-                let end = CatalogStore.timestamp(session.endedAt).map(Date.init(timeIntervalSince1970:)) ?? start
-                for part in UnsyncedReading.splitByDay(start: start, end: end, seconds: 1, zone: zone) {
-                    days.insert(part.day)
-                }
-            case .readThroughFinish, .readThroughAbandon:
-                // The phone's own day, as the server keeps it.
-                guard let change = try? decoder.decode(Shishoapp.JournalBookPayload.self, from: row.payload) else { continue }
-                days.insert(change.day.isEmpty ? CatalogStore.day(row.at) : change.day)
-            case .readThroughDelete:
-                guard let change = try? decoder.decode(Shishoapp.JournalReadThroughDeletePayload.self, from: row.payload),
-                      let id = change.readThroughId, let day = endDays[id] else { continue }
-                days.insert(day)
-            default:
-                continue
-            }
-        }
-        return days
-    }
-
     /// The heatmap's days for year, or for the 12 months to today when nil,
     /// as the server picks them.
     static func window(year: Int?, today: String) -> (from: String, to: String) {

@@ -236,15 +236,17 @@ extension CatalogStore {
     }
 
     /// Folds the sessions every copy counts into counted_sessions: those the
-    /// server took in before the oldest copy of Reading Stats was fetched.
-    /// The calendar's copies don't hold them back: the sync fetches again,
-    /// or drops, each one showing a day a session it sent falls on before
-    /// this runs (SyncEngine.refreshCalendar), so a copy fetched before a
-    /// session was taken in never outlives it being laid over.
-    func statsCaughtUp() throws {
+    /// server took in before the oldest copy of Reading Stats, and, while
+    /// the Calendar shows (calendarHolds), of the Calendar, was fetched. The
+    /// sync fetches every Calendar copy again after sending what can change
+    /// it (SyncEngine.refreshCalendar), and the device keeps few, so a copy
+    /// holds sessions back only until a sync reaches it.
+    func statsCaughtUp(calendarHolds: Bool = true) throws {
         try pool.write { db in
             let decoder = makeShishoDecoder()
-            guard let cutoff = try Double.fetchOne(db, sql: "SELECT MIN(fetched_at) FROM stats_cache") else { return }
+            guard let statsCutoff = try Double.fetchOne(db, sql: "SELECT MIN(fetched_at) FROM stats_cache") else { return }
+            let calendarCutoff = calendarHolds ? try Double.fetchOne(db, sql: "SELECT MIN(fetched_at) FROM calendar_cache") : nil
+            let cutoff = min(statsCutoff, calendarCutoff ?? statsCutoff)
             for row in try Row.fetchAll(db, sql: "SELECT payload FROM unstated_sessions WHERE accepted_at < ?", arguments: [cutoff]) {
                 guard let session = try? decoder.decode(Shishoapp.JournalSessionPayload.self, from: row["payload"] as Data),
                       !session.sessionId.isEmpty else { continue }

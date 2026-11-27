@@ -360,8 +360,10 @@ enum RatingRules {
 /// Cancel, or swiping the sheet away, leaves the Rating as it was.
 struct RatingSheet: View {
     let title: String
-    let initial: Int?
     let set: (Int?) -> Void
+    /// The Rating as the sheet opened, kept when a sync changes it
+    /// meanwhile, so Done saves only what was picked here.
+    @State private var opened: Int?
 
     @Environment(\.dismiss) private var dismiss
     @State private var value: Int
@@ -372,8 +374,8 @@ struct RatingSheet: View {
 
     init(title: String, initial: Int?, set: @escaping (Int?) -> Void) {
         self.title = title
-        self.initial = initial
         self.set = set
+        _opened = State(initialValue: initial)
         _value = State(initialValue: initial ?? 0)
     }
 
@@ -439,7 +441,7 @@ struct RatingSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "Done")) {
                         let chosen = value == 0 ? nil : value
-                        if chosen != initial { set(chosen) }
+                        if chosen != opened { set(chosen) }
                         dismiss()
                     }
                     .fontWeight(.semibold)

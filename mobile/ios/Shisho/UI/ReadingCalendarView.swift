@@ -21,6 +21,10 @@ struct ReadingCalendarView: View {
     /// offers the picker back and the month calendar, which has copies of
     /// its own.
     @State private var lastHeatmap: Shishoapp.StatsHeatmapResponse?
+    /// The earliest day a heatmap the server sent starts its years at, so a
+    /// year with no copy, shown from this device's reading alone, still
+    /// offers every year before it.
+    @State private var firstDayKnown: String?
     @State private var calendar: CalendarShown<Shishoapp.StatsCalendarResponse>??
     @State private var detail: CalendarShown<CalendarDayDetail>??
     @State private var books: [Int: BookSummary]?
@@ -70,7 +74,11 @@ struct ReadingCalendarView: View {
             try CatalogStore.calendarHeatmap(db, year: heatmapYear)
         }
         .onChange(of: heatmap) { _, shown in
-            if case .some(.some(let shown)) = shown { lastHeatmap = shown.value }
+            guard case .some(.some(let shown)) = shown else { return }
+            lastHeatmap = shown.value
+            if !shown.deviceOnly, let first = shown.value.firstDay, firstDayKnown.map({ first < $0 }) ?? true {
+                firstDayKnown = first
+            }
         }
         .observing(model.session?.store, id: shownMonth, into: $calendar) { [shownMonth] db in
             try CatalogStore.calendarMonth(db, year: shownMonth.year, month: shownMonth.month)
@@ -131,7 +139,8 @@ struct ReadingCalendarView: View {
                 try session.store.saveCalendar(response, key: key, fetchedAt: began)
             case .day(let day):
                 let response = try await session.client.statsDay(day: day)
-                try session.store.saveCalendar(response, key: key, fetchedAt: began)
+                try session.store.saveCalendar(response, key: key, fetchedAt: began,
+                                               zone: response.timeZone.isEmpty ? nil : response.timeZone)
             }
         } catch is CancellationError {
         } catch {
@@ -179,7 +188,8 @@ struct ReadingCalendarView: View {
     /// Every year from this one back to the first with any reading.
     private func years(_ shown: Shishoapp.StatsHeatmapResponse) -> [Int] {
         let thisYear = CalendarLayout.yearMonth(shown.today).year
-        let firstYear = shown.firstDay.map { CalendarLayout.yearMonth($0).year } ?? thisYear
+        let first = [shown.firstDay, firstDayKnown].compactMap { $0 }.min()
+        let firstYear = first.map { CalendarLayout.yearMonth($0).year } ?? thisYear
         var years = Array(stride(from: thisYear, through: min(firstYear, thisYear), by: -1))
         if let heatmapYear, !years.contains(heatmapYear) { years.append(heatmapYear) }
         return years

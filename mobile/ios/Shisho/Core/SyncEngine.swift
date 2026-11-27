@@ -98,49 +98,53 @@ final class SyncEngine: Sendable {
             try store.saveStats(stats, year: year, fetchedAt: began)
             if let year { _ = wantedYears.withLock { $0.remove(year) } }
         }
-        try await refreshCalendar()
-        try store.statsCaughtUp()
+        let calendarShown = try await refreshCalendar()
+        try store.statsCaughtUp(calendarHolds: calendarShown)
     }
 
-    /// Fetches again each copy of Reading Stats' Calendar showing a day the
-    /// changes this device sent fall on (markCalendarStale), one request a
-    /// copy, so it counts what the server took in before statsCaughtUp stops
-    /// laying that over it. A copy that can't come is dropped rather than
-    /// kept without it; one kept in another time zone than Reading Stats now
-    /// say is dropped first. Days stay noted for the next sync when this one
-    /// stops partway.
-    private func refreshCalendar() async throws {
+    /// Fetches every copy of Reading Stats' Calendar again once this device
+    /// sent changes that can alter it (markCalendarStale), one request a
+    /// copy, so each counts what the server took in before statsCaughtUp
+    /// stops laying that over it. A copy the server refuses for good goes;
+    /// one that can't come now stays as it was, and holds back what it
+    /// doesn't count, until a later sync fetches it. Returns whether the
+    /// server lists the Calendar: one that doesn't hides it, so its copies
+    /// hold nothing back meanwhile, and the changes stay noted for when it
+    /// does again.
+    private func refreshCalendar() async throws -> Bool {
+        guard capabilities().contains(Shishoapp.Capability.readingCalendar.rawValue) else { return false }
         let began = Date()
-        let keys = try store.calendarCopiesToRefresh()
-        let offered = capabilities().contains(Shishoapp.Capability.readingCalendar.rawValue)
-        for key in keys {
+        var current = true
+        for key in try store.calendarCopiesToRefresh() {
             let fetchedAt = Date()
             do {
-                guard offered else {
-                    try store.deleteCalendar(key)
-                    continue
-                }
                 switch key {
                 case .heatmap(let year):
                     let response = try await client.statsHeatmap(year: year)
                     try Task.checkCancellation()
-                    try store.saveCalendar(response, key: key, fetchedAt: fetchedAt)
+                    try store.saveCalendar(response, key: key, fetchedAt: fetchedAt, viewed: false)
                 case .month(let year, let month):
                     let response = try await client.statsCalendar(year: year, month: month)
                     try Task.checkCancellation()
-                    try store.saveCalendar(response, key: key, fetchedAt: fetchedAt)
+                    try store.saveCalendar(response, key: key, fetchedAt: fetchedAt, viewed: false)
                 case .day(let day):
                     let response = try await client.statsDay(day: day)
                     try Task.checkCancellation()
-                    try store.saveCalendar(response, key: key, fetchedAt: fetchedAt)
+                    try store.saveCalendar(response, key: key, fetchedAt: fetchedAt, zone: response.timeZone.isEmpty ? nil : response.timeZone, viewed: false)
                 }
             } catch {
                 if error is CancellationError || Task.isCancelled { throw CancellationError() }
-                await Diagnostics.shared.log(.sync, "reading calendar copy \(key.raw) dropped, not fetched again: \(Diagnostics.describe(error))")
-                try store.deleteCalendar(key)
+                if case APIError.server(let status, _) = error, (400..<500).contains(status), status != 429 {
+                    await Diagnostics.shared.log(.sync, "reading calendar copy \(key.raw) dropped: \(Diagnostics.describe(error))")
+                    try store.deleteCalendar(key)
+                } else {
+                    await Diagnostics.shared.log(.sync, "reading calendar copy \(key.raw) kept, not fetched again: \(Diagnostics.describe(error))")
+                    current = false
+                }
             }
         }
-        try store.calendarRefreshed(before: began)
+        if current { try store.calendarRefreshed(before: began) }
+        return true
     }
 
     /// Sends the journal in batches until nothing sendable is left. Any
@@ -154,9 +158,7 @@ final class SyncEngine: Sendable {
             guard !rows.isEmpty else { return }
             // Noted first, so a sync that stops once the server has them
             // still leaves the calendar's copies to fetch again.
-            if capabilities().contains(Shishoapp.Capability.readingCalendar.rawValue) {
-                try store.markCalendarStale(rows)
-            }
+            try store.markCalendarStale(rows)
             let response: Shishoapp.JournalResponse
             do {
                 response = try await client.journal(rows)

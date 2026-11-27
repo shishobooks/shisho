@@ -48,6 +48,9 @@ struct StoredDownload: Equatable, Identifiable, Sendable {
     /// How far through the File the user is, from 0 to 1: this device's
     /// place, or the server's; nil when it hasn't been started.
     var progress: Double?
+    /// Queued again because the server replaced its File, with the old copy
+    /// still on the device (DownloadRow.replacing).
+    var replacing = false
 }
 
 extension CatalogStore {
@@ -149,7 +152,7 @@ extension CatalogStore {
     /// tab.
     static func storedDownloads(_ db: Database) throws -> [StoredDownload] {
         let rows = try Row.fetchAll(db, sql: """
-            SELECT d.file_id, d.file_type, d.state, d.size_bytes, d.error, f.display_name, f.book_id, f.cover_version,
+            SELECT d.file_id, d.file_type, d.state, d.size_bytes, d.error, d.replacing, f.display_name, f.book_id, f.cover_version,
                 COALESCE((SELECT percentage FROM local_progress WHERE file_id = d.file_id),
                     (SELECT percentage FROM reading_positions WHERE file_id = d.file_id)) AS progress
             FROM downloads d JOIN book_files f ON f.id = d.file_id
@@ -166,7 +169,8 @@ extension CatalogStore {
             return StoredDownload(fileID: row["file_id"], book: book, fileType: type,
                                   label: name.isEmpty ? FileTypes.label(type) : name,
                                   state: DownloadState(rawValue: row["state"]) ?? .failed, sizeBytes: row["size_bytes"],
-                                  error: row["error"], coverVersion: row["cover_version"], progress: row["progress"])
+                                  error: row["error"], coverVersion: row["cover_version"], progress: row["progress"],
+                                  replacing: row["replacing"])
         }
     }
 
