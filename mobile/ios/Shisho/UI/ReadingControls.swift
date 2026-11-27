@@ -317,22 +317,32 @@ struct PreciseStars: View {
     var spacing: CGFloat = 2
 
     var body: some View {
+        // Written out, not a ForEach: on iOS 26, the ViewThatFits that holds
+        // the Rating in ReadingControls measures it during animation frames
+        // off the main thread, building a ForEach's rows there, and Swift 6
+        // traps when its main-actor closure runs off the main thread.
         HStack(spacing: spacing) {
-            ForEach(0..<5, id: \.self) { index in
-                let fill = min(1, max(0, Double(units) / 4 - Double(index)))
-                ZStack(alignment: .leading) {
-                    Icon(.star, size: size, relativeTo: nil)
-                        .foregroundStyle(Theme.rating.opacity(0.55))
-                    Icon(.starFill, size: size, relativeTo: nil)
-                        .foregroundStyle(Theme.rating)
-                        .mask(alignment: .leading) {
-                            Rectangle().frame(width: size * fill)
-                        }
-                }
-                .frame(width: size, height: size)
-            }
+            star(0)
+            star(1)
+            star(2)
+            star(3)
+            star(4)
         }
         .accessibilityHidden(true)
+    }
+
+    private func star(_ index: Int) -> some View {
+        let fill = min(1, max(0, Double(units) / 4 - Double(index)))
+        return ZStack(alignment: .leading) {
+            Icon(.star, size: size, relativeTo: nil)
+                .foregroundStyle(Theme.rating.opacity(0.55))
+            Icon(.starFill, size: size, relativeTo: nil)
+                .foregroundStyle(Theme.rating)
+                .mask(alignment: .leading) {
+                    Rectangle().frame(width: size * fill)
+                }
+        }
+        .frame(width: size, height: size)
     }
 }
 
