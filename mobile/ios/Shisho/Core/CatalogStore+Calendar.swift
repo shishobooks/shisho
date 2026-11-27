@@ -61,7 +61,7 @@ extension CatalogStore {
     /// CalendarCacheKey, with the time zone its days are in and when the
     /// Calendar last showed it. And when this device sent changes the
     /// copies may not count yet (markCalendarStale).
-    static func migrateReadingCalendar(_ db: Database) throws {
+    static func createReadingCalendar(_ db: Database) throws {
         try db.create(table: "calendar_cache") { t in
             t.primaryKey("cache_key", .text)
             t.column("body", .blob).notNull()

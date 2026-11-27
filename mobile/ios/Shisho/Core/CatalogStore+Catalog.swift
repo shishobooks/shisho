@@ -100,42 +100,111 @@ struct Touched {
 extension CatalogStore {
     // MARK: - Schema
 
-    /// The whole catalog: Series, Persons, Genres, Tags, Publishers,
-    /// Lists, and the user's record for each Book, what Books and Files
-    /// gained with them, what the user can access, and the search index.
-    static func migrateFullCatalog(_ db: Database) throws {
-        try db.alter(table: "books") { t in
-            t.add(column: "description", .text)
+    /// The catalog as the feed sends it: where the sync is, Libraries,
+    /// Books and their Files, chapters, and people, Series, Persons, Genres,
+    /// Tags, and Publishers, the server's place in each File, what the user
+    /// can access, and the search index.
+    static func createCatalog(_ db: Database) throws {
+        try db.create(table: "sync_state") { t in
+            t.primaryKey("id", .integer).check { $0 == 1 }
+            t.column("cursor", .integer).notNull().defaults(to: 0)
+            t.column("generation", .integer).notNull().defaults(to: 0)
+            t.column("starting_over", .boolean).notNull().defaults(to: false)
+            t.column("feed_version", .integer).notNull().defaults(to: 0)
+            t.column("last_synced_at", .datetime)
+            t.column("expired_through", .integer).notNull().defaults(to: 0)
+            // False until a download from the start records what the user
+            // could access when it began; access changes after are answered
+            // from then.
+            t.column("access_known", .boolean).notNull().defaults(to: false)
         }
-        // When the Read-through was last read, as the server's Last read sort
-        // counts it, for the same sort here.
-        try db.alter(table: "read_throughs") { t in
-            t.add(column: "last_read_at", .double)
+        try db.execute(sql: "INSERT INTO sync_state (id) VALUES (1)")
+        try db.create(table: "libraries") { t in
+            t.primaryKey("id", .integer)
+            t.column("name", .text).notNull()
+            t.column("cover_aspect_ratio", .text).notNull()
+            t.column("sort_spec", .text).notNull().defaults(to: "")
+            t.column("generation", .integer).notNull()
         }
-        try db.alter(table: "book_files") { t in
-            t.add(column: "publisher_id", .integer)
-            t.add(column: "publisher", .text)
-            // JSON arrays: [{"type","value"}], and a CBZ's page names.
-            t.add(column: "identifiers", .text).notNull().defaults(to: "[]")
-            t.add(column: "pages", .text).notNull().defaults(to: "[]")
-            // What the File's page shows, as the web's does.
-            t.add(column: "codec", .text)
-            t.add(column: "bitrate", .integer)
-            t.add(column: "language", .text)
-            t.add(column: "abridged", .boolean)
-            t.add(column: "url", .text)
-            t.add(column: "reading_direction", .text)
-            t.add(column: "filepath", .text).notNull().defaults(to: "")
-            t.add(column: "file_modified_at", .double)
-            t.add(column: "created_at", .double)
+        try db.create(table: "books") { t in
+            t.primaryKey("id", .integer)
+            t.column("library_id", .integer).notNull().indexed()
+            t.column("title", .text).notNull()
+            t.column("subtitle", .text)
+            t.column("sort_title", .text).notNull()
+            t.column("authors", .text).notNull()
+            t.column("description", .text)
+            t.column("cover_version", .text).notNull()
+            t.column("created_at", .double).notNull()
+            t.column("generation", .integer).notNull()
         }
-        // False until a download from the start records what the user could
-        // access when it began; access changes after are answered from then.
-        try db.alter(table: "sync_state") { t in
-            t.add(column: "access_known", .boolean).notNull().defaults(to: false)
+        try db.create(index: "books_by_date_added", on: "books", columns: ["created_at", "id"])
+        try db.create(table: "book_authors") { t in
+            t.column("book_id", .integer).notNull().references("books", onDelete: .cascade)
+            t.column("position", .integer).notNull()
+            t.column("person_id", .integer).notNull()
+            t.column("name", .text).notNull()
+            t.column("sort_name", .text).notNull()
+            t.column("role", .text)
+            t.primaryKey(["book_id", "position"])
         }
         try db.create(index: "book_authors_by_person", on: "book_authors", columns: ["person_id"])
+        try db.create(table: "book_series") { t in
+            t.column("book_id", .integer).notNull().references("books", onDelete: .cascade)
+            t.column("position", .integer).notNull()
+            t.column("series_id", .integer).notNull()
+            t.column("name", .text).notNull()
+            t.column("sort_name", .text).notNull()
+            t.column("number", .double)
+            t.column("number_end", .double)
+            t.column("unit", .text)
+            t.primaryKey(["book_id", "position"])
+        }
         try db.create(index: "book_series_by_series", on: "book_series", columns: ["series_id"])
+        try db.create(table: "book_files") { t in
+            t.primaryKey("id", .integer)
+            t.column("book_id", .integer).notNull().references("books", onDelete: .cascade).indexed()
+            t.column("position", .integer).notNull()
+            t.column("file_type", .text).notNull()
+            t.column("file_role", .text).notNull()
+            t.column("size_bytes", .integer).notNull()
+            t.column("display_name", .text).notNull()
+            // Each File's own cover and narrators, which can differ from
+            // its Book's other Files.
+            t.column("cover_version", .text).notNull().defaults(to: "")
+            t.column("narrators", .text).notNull().defaults(to: "[]")
+            t.column("release_date", .double)
+            t.column("page_count", .integer)
+            // A reflowable ebook's, shown beside its pages.
+            t.column("word_count", .integer)
+            t.column("duration_seconds", .double)
+            t.column("publisher_id", .integer)
+            t.column("publisher", .text)
+            // JSON arrays: [{"type","value"}], and a CBZ's page names.
+            t.column("identifiers", .text).notNull().defaults(to: "[]")
+            t.column("pages", .text).notNull().defaults(to: "[]")
+            // What the File's page shows, as the web's does.
+            t.column("codec", .text)
+            t.column("bitrate", .integer)
+            t.column("language", .text)
+            t.column("abridged", .boolean)
+            t.column("url", .text)
+            t.column("reading_direction", .text)
+            t.column("filepath", .text).notNull().defaults(to: "")
+            t.column("file_modified_at", .double)
+            t.column("created_at", .double)
+        }
+        try db.create(table: "book_file_chapters") { t in
+            t.column("file_id", .integer).notNull().references("book_files", onDelete: .cascade)
+            t.column("position", .integer).notNull()
+            t.column("chapter_id", .integer).notNull()
+            t.column("parent_id", .integer)
+            t.column("title", .text).notNull()
+            t.column("start_ms", .integer)
+            t.column("start_page", .integer)
+            t.column("href", .text)
+            t.primaryKey(["file_id", "position"])
+        }
         for (table, column) in [("book_genres", "genre_id"), ("book_tags", "tag_id")] {
             try db.create(table: table) { t in
                 t.column("book_id", .integer).notNull().references("books", onDelete: .cascade)
@@ -166,33 +235,18 @@ extension CatalogStore {
                 t.column("generation", .integer).notNull()
             }
         }
-        try db.create(table: "lists") { t in
-            t.primaryKey("id", .integer)
-            t.column("name", .text).notNull()
-            t.column("description", .text)
-            t.column("is_ordered", .boolean).notNull()
-            t.column("default_sort", .text).notNull()
-            t.column("owner_id", .integer).notNull()
-            t.column("owner_name", .text).notNull()
-            t.column("permission", .text).notNull()
-            // JSON: [{"user_id","username","permission"}], for its owner and
-            // managers.
-            t.column("shares", .text).notNull().defaults(to: "[]")
-            t.column("generation", .integer).notNull()
-        }
-        try db.create(table: "list_books") { t in
-            t.column("list_id", .integer).notNull().references("lists", onDelete: .cascade)
-            t.column("position", .integer).notNull()
-            t.column("book_id", .integer).notNull().indexed()
-            t.column("sort_order", .integer)
-            t.column("added_at", .double).notNull()
-            t.primaryKey(["list_id", "position"])
-        }
-        try db.create(table: "user_books") { t in
-            t.primaryKey("book_id", .integer)
-            t.column("rating", .integer)
-            t.column("to_read_position", .integer)
-            t.column("reference", .boolean).notNull()
+        // The server's place in each File, with the name of the Device it
+        // came from, so an offer can say where it's from.
+        try db.create(table: "reading_positions") { t in
+            t.primaryKey("file_id", .integer)
+            t.column("cfi", .text)
+            t.column("page", .integer)
+            t.column("seconds", .double)
+            t.column("percentage", .double).notNull()
+            t.column("occurred_at", .double).notNull()
+            t.column("source", .text).notNull()
+            t.column("device_id", .text)
+            t.column("device_name", .text)
             t.column("generation", .integer).notNull()
         }
         // What the user can access, and how far a Library or List gained

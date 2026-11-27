@@ -114,17 +114,19 @@ struct SyncState: Equatable, Sendable {
 /// One account's copy of the catalog: every screen reads from it, and the
 /// network only updates it (ADR 0021, ADR 0023).
 ///
-/// Schema changes are GRDB migrations, registered in order in `migrator`
-/// and never edited once released: a change is a new migration. Until then,
-/// edit them in place; debug builds rebuild a database whose migrations
-/// changed. The catalog
-/// can always be downloaded again, but later tables (the journal of changes
-/// made offline) can't, so every change migrates rather than wipes.
+/// Schema changes are GRDB migrations, registered in order in `migrator`.
+/// The first, "v1", is the whole schema the first release (0.10.0) ships:
+/// until that release it's edited in place, and debug builds rebuild a
+/// database whose migrations changed. Once 0.10.0 is out it has shipped and
+/// is never edited again; every change after is a new migration appended
+/// after it. The catalog can always be downloaded again, but the journal of
+/// changes made offline can't, so a released schema migrates rather than
+/// wipes.
 final class CatalogStore: Sendable {
     /// The kinds and fields of the feed this version understands. When an
     /// app update understands more, raise it, and the catalog downloads
     /// again from the start in the background.
-    static let feedVersion = 7
+    static let feedVersion = 1
 
     let pool: DatabasePool
 
@@ -140,261 +142,18 @@ final class CatalogStore: Sendable {
         #if DEBUG
         migrator.eraseDatabaseOnSchemaChange = true
         #endif
-        migrator.registerMigration("v1: catalog") { db in
-            try db.create(table: "sync_state") { t in
-                t.primaryKey("id", .integer).check { $0 == 1 }
-                t.column("cursor", .integer).notNull().defaults(to: 0)
-                t.column("generation", .integer).notNull().defaults(to: 0)
-                t.column("starting_over", .boolean).notNull().defaults(to: false)
-                t.column("feed_version", .integer).notNull().defaults(to: 0)
-                t.column("last_synced_at", .datetime)
-                t.column("expired_through", .integer).notNull().defaults(to: 0)
-            }
-            try db.execute(sql: "INSERT INTO sync_state (id) VALUES (1)")
-            try db.create(table: "libraries") { t in
-                t.primaryKey("id", .integer)
-                t.column("name", .text).notNull()
-                t.column("cover_aspect_ratio", .text).notNull()
-                t.column("sort_spec", .text).notNull().defaults(to: "")
-                t.column("generation", .integer).notNull()
-            }
-            try db.create(table: "books") { t in
-                t.primaryKey("id", .integer)
-                t.column("library_id", .integer).notNull().indexed()
-                t.column("title", .text).notNull()
-                t.column("subtitle", .text)
-                t.column("sort_title", .text).notNull()
-                t.column("authors", .text).notNull()
-                t.column("cover_version", .text).notNull()
-                t.column("created_at", .double).notNull()
-                t.column("generation", .integer).notNull()
-            }
-            try db.create(index: "books_by_date_added", on: "books", columns: ["created_at", "id"])
-            try db.create(table: "book_authors") { t in
-                t.column("book_id", .integer).notNull().references("books", onDelete: .cascade)
-                t.column("position", .integer).notNull()
-                t.column("person_id", .integer).notNull()
-                t.column("name", .text).notNull()
-                t.column("sort_name", .text).notNull()
-                t.column("role", .text)
-                t.primaryKey(["book_id", "position"])
-            }
-            try db.create(table: "book_series") { t in
-                t.column("book_id", .integer).notNull().references("books", onDelete: .cascade)
-                t.column("position", .integer).notNull()
-                t.column("series_id", .integer).notNull()
-                t.column("name", .text).notNull()
-                t.column("sort_name", .text).notNull()
-                t.column("number", .double)
-                t.column("number_end", .double)
-                t.column("unit", .text)
-                t.primaryKey(["book_id", "position"])
-            }
-            try db.create(table: "book_files") { t in
-                t.primaryKey("id", .integer)
-                t.column("book_id", .integer).notNull().references("books", onDelete: .cascade).indexed()
-                t.column("position", .integer).notNull()
-                t.column("file_type", .text).notNull()
-                t.column("file_role", .text).notNull()
-                t.column("size_bytes", .integer).notNull()
-                t.column("display_name", .text).notNull()
-                t.column("release_date", .double)
-                t.column("page_count", .integer)
-                t.column("duration_seconds", .double)
-            }
-        }
-        // The journal (ADR 0024) and what the feed gained with it: chapters,
-        // and the user's own Reading Positions and Read-throughs. The journal
-        // can't be downloaded again, so this and every later change migrates.
-        migrator.registerMigration("v2: listening") { db in
-            // Each File's own cover and narrators, which can differ from
-            // its Book's other Files.
-            try db.alter(table: "book_files") { t in
-                t.add(column: "cover_version", .text).notNull().defaults(to: "")
-                t.add(column: "narrators", .text).notNull().defaults(to: "[]")
-            }
-            try db.create(table: "book_file_chapters") { t in
-                t.column("file_id", .integer).notNull().references("book_files", onDelete: .cascade)
-                t.column("position", .integer).notNull()
-                t.column("chapter_id", .integer).notNull()
-                t.column("parent_id", .integer)
-                t.column("title", .text).notNull()
-                t.column("start_ms", .integer)
-                t.column("start_page", .integer)
-                t.column("href", .text)
-                t.primaryKey(["file_id", "position"])
-            }
-            // The server's place in each File, from the feed.
-            try db.create(table: "reading_positions") { t in
-                t.primaryKey("file_id", .integer)
-                t.column("cfi", .text)
-                t.column("page", .integer)
-                t.column("seconds", .double)
-                t.column("percentage", .double).notNull()
-                t.column("occurred_at", .double).notNull()
-                t.column("source", .text).notNull()
-                t.column("device_id", .text)
-                t.column("generation", .integer).notNull()
-            }
-            try db.create(table: "read_throughs") { t in
-                t.primaryKey("id", .integer)
-                t.column("book_id", .integer).indexed()
-                t.column("begin_day", .text)
-                t.column("end_day", .text)
-                t.column("outcome", .text).notNull()
-                t.column("paused", .boolean).notNull()
-                t.column("generation", .integer).notNull()
-            }
-            // This installation's own place in each File it played.
-            try db.create(table: "local_positions") { t in
-                t.primaryKey("file_id", .integer)
-                t.column("seconds", .double).notNull()
-                t.column("percentage", .double).notNull()
-                t.column("updated_at", .double).notNull()
-                // When the server's place was from when this device first
-                // moved since its last sync.
-                t.column("base_occurred_at", .double)
-                // Another device's place that arrived while this one had
-                // moves of its own to send, offered until the user picks.
-                t.column("offer_seconds", .double)
-                t.column("offer_occurred_at", .double)
-                t.column("offer_source", .text)
-                t.column("offer_device_id", .text)
-            }
-            // Changes made on the device, oldest first, until the server
-            // takes them in. held_for is the capability list a server that
-            // didn't understand one listed then: it waits until that changes.
-            try db.create(table: "journal") { t in
-                t.autoIncrementedPrimaryKey("seq")
-                t.column("event_id", .text).notNull().unique()
-                t.column("type", .text).notNull()
-                t.column("at", .double).notNull()
-                t.column("payload", .blob).notNull()
-                t.column("file_id", .integer)
-                // Position events of one sitting replace each other until
-                // sent; the end of a File never is replaced.
-                t.column("coalesce_key", .text).indexed()
-                t.column("held_for", .text)
-                t.column("held_reason", .text)
-            }
-            // The sitting being timed, at most one.
-            try db.create(table: "open_sitting") { t in
-                t.primaryKey("id", .integer).check { $0 == 1 }
-                t.column("sitting", .blob).notNull()
-            }
-            // Changes the server refused, for the user to read.
-            try db.create(table: "journal_notes") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("at", .double).notNull()
-                t.column("event_type", .text).notNull()
-                t.column("reason", .text).notNull()
-            }
-        }
-        migrator.registerMigration("v3: full catalog", migrate: CatalogStore.migrateFullCatalog)
-        // Bookmarks (#916), from the feed and made on the device. A
-        // Bookmark's journal events name it, so deleting one not yet sent
-        // drops them, and a note edited here shows until its edit is sent.
-        migrator.registerMigration("v4: bookmarks") { db in
-            try db.create(table: "bookmarks") { t in
-                // The id this installation made it under, or "server-<id>"
-                // for one made elsewhere.
-                t.primaryKey("id", .text)
-                t.column("server_id", .integer).unique()
-                t.column("local_id", .text)
-                t.column("file_id", .integer).notNull().indexed()
-                t.column("seconds", .double).notNull()
-                // The server's note, and one edited here, shown while its
-                // edit waits in the journal.
-                t.column("note", .text)
-                t.column("local_note", .text)
-                t.column("created_at", .double).notNull()
-                // Deleted here, until the server's delete arrives.
-                t.column("deleted", .boolean).notNull().defaults(to: false)
-                t.column("generation", .integer).notNull()
-            }
-            try db.alter(table: "journal") { t in
-                t.add(column: "bookmark_id", .text).indexed()
-            }
-        }
-        // Reading ebooks (#919): this installation's place in an ebook is a
-        // CFI, and so is another device's place offered instead. seconds
-        // stays an audiobook's, 0 for an ebook.
-        migrator.registerMigration("v5: reading") { db in
-            try db.alter(table: "local_positions") { t in
-                t.add(column: "cfi", .text)
-                t.add(column: "offer_cfi", .text)
-                t.add(column: "offer_percentage", .double)
-            }
-        }
-        // The name of the Device a place came from, so an offer can say
-        // where it's from. Raising feedVersion downloads names for places
-        // already synced.
-        migrator.registerMigration("v6: device names") { db in
-            try db.alter(table: "reading_positions") { t in
-                t.add(column: "device_name", .text)
-            }
-            try db.alter(table: "local_positions") { t in
-                t.add(column: "offer_device_name", .text)
-            }
-        }
-        // The chapter and pages left the reader last showed in a File, for
-        // its Book's page, which can't work them out without the book.
-        migrator.registerMigration("v7: reader places") { db in
-            try db.create(table: "reader_places") { t in
-                t.primaryKey("file_id", .integer)
-                t.column("chapter", .text)
-                t.column("pages_left", .integer)
-                t.column("percentage", .double).notNull()
-            }
-        }
-        // Downloads (#915): the Files kept on the device to listen to and
-        // read offline, and those on their way; and this device's place to
-        // the whole percent, for covers and the Downloads tab.
-        migrator.registerMigration("v8: downloads") { db in
+        // Each area creates its own tables, in its own file. The order
+        // matters: a table is created after the tables it references.
+        migrator.registerMigration("v1") { db in
+            try CatalogStore.createCatalog(db)
+            try CatalogStore.createJournal(db)
+            try CatalogStore.createBookmarks(db)
+            try CatalogStore.createReaderState(db)
             try CatalogStore.createDownloads(db)
             try CatalogStore.createLocalProgress(db)
+            try CatalogStore.createReadingRecord(db)
+            try CatalogStore.createReadingCalendar(db)
         }
-        // A reflowable ebook's word count, shown beside a File's pages or
-        // duration. Raising feedVersion downloads it for Files already
-        // synced.
-        migrator.registerMigration("v9: word counts") { db in
-            try db.alter(table: "book_files") { t in
-                t.add(column: "word_count", .integer)
-            }
-        }
-        // Reading comics and PDFs (#921): this installation's place in a
-        // Page-based File is a 0-based page, and so is another device's
-        // place offered instead. The Page flow the user chose for a Book
-        // comes with their record of it, and one chosen here shows until
-        // the feed brings it back; raising feedVersion downloads the flows
-        // of records already synced.
-        migrator.registerMigration("v10: pages") { db in
-            try db.alter(table: "local_positions") { t in
-                t.add(column: "page", .integer)
-                t.add(column: "offer_page", .integer)
-            }
-            try db.alter(table: "user_books") { t in
-                t.add(column: "page_flow", .text)
-            }
-            try db.create(table: "chosen_page_flows") { t in
-                t.primaryKey("book_id", .integer)
-                t.column("page_flow", .text).notNull()
-                // The journal event sending it, or nil for a choice kept on
-                // the device because the server can't take it.
-                t.column("event_id", .text)
-                // The server took it in: it goes once the feed brings the
-                // Book's record back, so the choice never flickers back to
-                // the old one in between.
-                t.column("accepted", .boolean).notNull().defaults(to: false)
-            }
-        }
-        // The reading record offline (#918): the feed's copy of the user's
-        // records kept apart from what screens read, which lays the changes
-        // the server hasn't confirmed over it, and Reading Stats as last
-        // fetched. Raising feedVersion downloads deleted Books' titles for
-        // Reading History and which Lists this installation made.
-        migrator.registerMigration("v11: reading record", migrate: CatalogStore.migrateReadingRecord)
-        migrator.registerMigration("v12: reading calendar", migrate: CatalogStore.migrateReadingCalendar)
         return migrator
     }
 

@@ -78,6 +78,32 @@ struct ReadProgress: Equatable, Sendable {
 }
 
 extension CatalogStore {
+    /// What the reader keeps for a File's Book page, and the Page flow the
+    /// user chose for a Book here.
+    static func createReaderState(_ db: Database) throws {
+        // The chapter and pages left the reader last showed in a File, for
+        // its Book's page, which can't work them out without the book.
+        try db.create(table: "reader_places") { t in
+            t.primaryKey("file_id", .integer)
+            t.column("chapter", .text)
+            t.column("pages_left", .integer)
+            t.column("percentage", .double).notNull()
+        }
+        // The Page flow the user chose for a Book comes with their record
+        // of it, and one chosen here shows until the feed brings it back.
+        try db.create(table: "chosen_page_flows") { t in
+            t.primaryKey("book_id", .integer)
+            t.column("page_flow", .text).notNull()
+            // The journal event sending it, or nil for a choice kept on
+            // the device because the server can't take it.
+            t.column("event_id", .text)
+            // The server took it in: it goes once the feed brings the
+            // Book's record back, so the choice never flickers back to
+            // the old one in between.
+            t.column("accepted", .boolean).notNull().defaults(to: false)
+        }
+    }
+
     /// The File Types the reader lays out with foliate (ADR 0026).
     static let reflowableTypes: Set<String> = ["epub", "kepub", "mobi", "azw3"]
     /// The File Types the reader shows in the image pager (ADR 0025).
