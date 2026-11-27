@@ -894,7 +894,7 @@ final class AppModel {
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
                 do {
-                    try await sync.sendJournal()
+                    try await sync.sendJournalCheckingFirst()
                 } catch {
                     await Diagnostics.shared.log(.sync, "changes not sent before signing out: \(Diagnostics.describe(error))")
                 }
