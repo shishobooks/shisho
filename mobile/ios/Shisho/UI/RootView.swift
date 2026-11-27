@@ -33,6 +33,11 @@ struct RootView: View {
                     }
                 }
                 .id(reader.id)
+                // VoiceOver stays in the reader. The screens under it are
+                // hidden from it too, but iOS still reaches into a hidden
+                // screen holding a NavigationStack, as the tabs do.
+                .accessibilityElement(children: .contain)
+                .accessibilityAddTraits(.isModal)
                 // Slides in as one piece: without it, the bars and a
                 // message the reader shows as it opens appear in place
                 // at once while the page slides up under them.
