@@ -227,6 +227,7 @@ func bookDocument(ctx context.Context, book *models.Book) *FeedBook {
 		Title:       book.Title,
 		Subtitle:    book.Subtitle,
 		SortTitle:   book.SortTitle,
+		Filepath:    book.Filepath,
 		Description: book.Description,
 		CreatedAt:   book.CreatedAt,
 		Authors:     []FeedAuthor{},

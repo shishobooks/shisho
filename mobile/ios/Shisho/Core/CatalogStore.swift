@@ -364,16 +364,17 @@ final class CatalogStore: Sendable {
     private static func upsert(_ book: Shishoapp.FeedBook, generation: Int, in db: Database) throws {
         try db.execute(
             sql: """
-            INSERT INTO books (id, library_id, title, subtitle, sort_title, authors, cover_version, created_at, description, generation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO books (id, library_id, title, subtitle, sort_title, authors, cover_version, created_at, description, filepath,
+                generation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET library_id = excluded.library_id, title = excluded.title,
                 subtitle = excluded.subtitle, sort_title = excluded.sort_title, authors = excluded.authors,
                 cover_version = excluded.cover_version, created_at = excluded.created_at,
-                description = excluded.description, generation = excluded.generation
+                description = excluded.description, filepath = excluded.filepath, generation = excluded.generation
             """,
             arguments: [book.id, book.libraryId, book.title, book.subtitle, book.sortTitle,
                         CatalogStore.galleryAuthors(book), book.coverVersion,
-                        CatalogStore.timestamp(book.createdAt) ?? 0, book.description, generation]
+                        CatalogStore.timestamp(book.createdAt) ?? 0, book.description, book.filepath, generation]
         )
         for table in ["book_authors", "book_series", "book_files"] {
             try db.execute(sql: "DELETE FROM \(table) WHERE book_id = ?", arguments: [book.id])

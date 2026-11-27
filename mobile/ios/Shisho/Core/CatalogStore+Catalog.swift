@@ -146,6 +146,8 @@ extension CatalogStore {
             t.column("sort_title", .text).notNull()
             t.column("authors", .text).notNull()
             t.column("description", .text)
+            // Where the server keeps the Book, which search finds it by.
+            t.column("filepath", .text).notNull().defaults(to: "")
             t.column("cover_version", .text).notNull()
             t.column("created_at", .double).notNull()
             t.column("generation", .integer).notNull()
@@ -272,11 +274,12 @@ extension CatalogStore {
             t.primaryKey("list_id", .integer)
             t.column("complete", .boolean).notNull()
         }
-        // The search index, made as the server makes its own (unicode61, with
-        // prefix indexes), so a search finds what the web finds. Rows are
+        // The search index, made as the server makes its own (the same
+        // columns in the same order, unicode61, with prefix indexes), so a
+        // search finds what the web finds, in the same ranking. Rows are
         // keyed by rowid equal to the record's id.
         let fts = [
-            ("books_fts", "book_id UNINDEXED, library_id UNINDEXED, title, subtitle, authors, narrators, series_names"),
+            ("books_fts", "book_id UNINDEXED, library_id UNINDEXED, title, filepath, subtitle, authors, filenames, narrators, series_names"),
             ("series_fts", "series_id UNINDEXED, library_id UNINDEXED, name, description, book_titles, book_authors"),
             ("persons_fts", "person_id UNINDEXED, library_id UNINDEXED, name, sort_name"),
             ("genres_fts", "genre_id UNINDEXED, library_id UNINDEXED, name"),
@@ -434,9 +437,10 @@ extension CatalogStore {
     // MARK: - Search index
 
     /// Rewrites the search rows of what entries touched, as the server's
-    /// own index holds them (`pkg/search/service.go`): a Book's authors,
-    /// narrators, and Series with their aliases; a Series' name with its
-    /// aliases, its Books' titles and authors; a Person's name with aliases.
+    /// own index holds them (`pkg/search/service.go`): a Book's path, every
+    /// one of its Files' paths, and its authors, narrators, and Series with
+    /// their aliases; a Series' name with its aliases, its Books' titles and
+    /// authors; a Person's name with aliases.
     static func reindex(_ touched: Touched, in db: Database) throws {
         var touched = touched
         if !touched.books.isEmpty {
@@ -444,12 +448,14 @@ extension CatalogStore {
             let books = touched.books.map(String.init).joined(separator: ",")
             try touched.series.formUnion(Int.fetchAll(db, sql: "SELECT series_id FROM book_series WHERE book_id IN (\(books))"))
         }
-        try rewrite("books_fts", "rowid, book_id, library_id, title, subtitle, authors, narrators, series_names", ids: touched.books, in: db, select: """
-            SELECT b.id, b.id, b.library_id, b.title, COALESCE(b.subtitle, ''),
+        try rewrite("books_fts", "rowid, book_id, library_id, title, filepath, subtitle, authors, filenames, narrators, series_names",
+                    ids: touched.books, in: db, select: """
+            SELECT b.id, b.id, b.library_id, b.title, b.filepath, COALESCE(b.subtitle, ''),
                 COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
                     SELECT DISTINCT a.name FROM book_authors a WHERE a.book_id = b.id
                     UNION SELECT DISTINCT j.value FROM book_authors a JOIN persons p ON p.id = a.person_id, json_each(p.aliases) j WHERE a.book_id = b.id
                 )), ''),
+                COALESCE((SELECT GROUP_CONCAT(f.filepath, ' ') FROM book_files f WHERE f.book_id = b.id), ''),
                 COALESCE((SELECT GROUP_CONCAT(name, ' ') FROM (
                     SELECT DISTINCT n.name FROM book_narrators n WHERE n.book_id = b.id
                     UNION SELECT DISTINCT j.value FROM book_narrators n JOIN persons p ON p.id = n.person_id, json_each(p.aliases) j WHERE n.book_id = b.id

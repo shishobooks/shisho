@@ -270,7 +270,7 @@ func init() {
 		// Book: its own columns, then each part of its document.
 		trigger("books_insert", "INSERT", "books", "", record("book", "NEW.id", "NEW.library_id", false)),
 		trigger("books_update", "UPDATE", "books",
-			differs("title", "subtitle", "sort_title", "created_at", "library_id", "description"),
+			differs("title", "subtitle", "sort_title", "created_at", "library_id", "description", "filepath"),
 			record("book", "NEW.id", "NEW.library_id", false)),
 		trigger("books_update_library", "UPDATE", "books", differs("library_id"),
 			fmt.Sprintf(`DELETE FROM change_log_entries WHERE kind = 'book_left' AND record_id = OLD.id AND library_id = OLD.library_id;

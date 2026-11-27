@@ -95,7 +95,6 @@ var columnsNotCompared = map[string]string{
 
 	"books.id":                 reasonPrimaryKey,
 	"books.updated_at":         reasonBookkeep,
-	"books.filepath":           "where the server keeps the Book",
 	"books.title_source":       reasonSource,
 	"books.sort_title_source":  reasonSource,
 	"books.subtitle_source":    reasonSource,

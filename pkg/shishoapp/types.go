@@ -192,6 +192,10 @@ type FeedBook struct {
 	Title     string  `json:"title"`
 	Subtitle  *string `json:"subtitle"`
 	SortTitle string  `json:"sort_title"`
+	// Filepath is where the server keeps the Book: its folder, or its one
+	// File for a Book at a Library's root. The app searches it, as the
+	// web's search does.
+	Filepath string `json:"filepath"`
 	// Description is the Book's, as plain text or HTML, as the web app
 	// shows it.
 	Description *string `json:"description"`

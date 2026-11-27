@@ -149,6 +149,30 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(try search("Children").books, [])
     }
 
+    /// As the web's search does, a Book is found by its folder and by the
+    /// paths of its Files, supplements included.
+    func testSearchesFileNamesAndFolders() throws {
+        let folder = "/library/Frank Herbert/Dune Deluxe Edition"
+        func located(_ folder: String, _ file: String) -> String {
+            book(1, "Dune", extra: #","filepath":"\#(folder)""#)
+                .replacingOccurrences(of: #""display_name":"Dune.epub","#, with: #""display_name":"Dune.epub","filepath":"\#(folder)/\#(file)","#)
+                .replacingOccurrences(of: #"}]}],"cover_version""#, with: #"}]},{"id":11,"file_type":"pdf","file_role":"supplement","size_bytes":1,"#
+                    + #""display_name":"Maps","filepath":"\#(folder)/maps-of-caladan.pdf"}],"cover_version""#)
+        }
+        try store.apply(page(#"{"entries":[\#(library(1, "Fiction")),\#(located(folder, "arrakeen-copy.epub")),\#(book(2, "Dune Messiah")),\#(resources)],"cursor":9}"#),
+                        access: Shishoapp.FeedAccess(libraryIds: [1], listIds: []))
+        let search = { (text: String) in try self.store.pool.read { try CatalogStore.search($0, text: text, libraryID: nil) }.books.map(\.id) }
+        XCTAssertEqual(try search("Deluxe"), [1], "a word of the Book's folder")
+        XCTAssertEqual(try search("arrakeen"), [1], "a word of a File's name")
+        XCTAssertEqual(try search("caladan"), [1], "a supplement's name")
+
+        // A Book moved on the server is found where it is now.
+        try store.apply(page(#"{"entries":[\#(located("/library/Herbert/Dune", "sietch-tabr.epub"))],"cursor":10}"#))
+        XCTAssertEqual(try search("Deluxe"), [])
+        XCTAssertEqual(try search("arrakeen"), [])
+        XCTAssertEqual(try search("sietch"), [1])
+    }
+
     func testReadingStatusAndRating() throws {
         try catalog()
         let standing = { try self.store.pool.read { try CatalogStore.standing($0, bookID: 1) } }

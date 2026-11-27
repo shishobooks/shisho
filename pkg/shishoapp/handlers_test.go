@@ -506,7 +506,7 @@ func TestFeed_BookDocument(t *testing.T) {
 	duration := 1.5
 	words := 187240
 	assert.Equal(t, &FeedBook{
-		ID: 1, LibraryID: 1, Title: "Dune", Subtitle: &subtitle, SortTitle: "Dune",
+		ID: 1, LibraryID: 1, Title: "Dune", Subtitle: &subtitle, SortTitle: "Dune", Filepath: "/library/1",
 		CreatedAt: time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC),
 		Authors: []FeedAuthor{
 			{PersonID: 1, Name: "Frank Herbert", SortName: "Herbert, Frank"},
