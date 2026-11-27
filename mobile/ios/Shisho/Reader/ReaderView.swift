@@ -178,7 +178,7 @@ struct ReaderView: View {
     // MARK: - Loading
 
     private var status: some View {
-        ReaderStatus(phase: model.phase, download: model.download, foreground: foreground) { Task { await model.load() } }
+        ReaderStatus(phase: model.phase, download: model.download, foreground: foreground) { model.reload() }
     }
 
     /// A chosen search result's bar, while the results are away.

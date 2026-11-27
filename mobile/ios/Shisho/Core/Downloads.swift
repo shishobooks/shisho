@@ -366,10 +366,23 @@ final class DownloadManager {
     /// already under way isn't needed after this. fetched is the copy this
     /// call put there, which only it may discard (`discard`), or nil for one
     /// it found on the device. report hears how far it has got, from 0
-    /// to 1, for the screen waiting on it.
+    /// to 1, for the screen waiting on it. Cancelled, as when the reader
+    /// closes first, the File is queued as a Download instead.
     func fetchNow(fileID: Int, reporting report: (@Sendable (Double) -> Void)? = nil) async throws -> (url: URL, fetched: UUID?) {
         if let local = localFile(fileID: fileID) { return (local, nil) }
-        let downloaded = try await client.download(fileID: fileID, progress: report)
+        let downloaded: URL
+        do {
+            downloaded = try await client.download(fileID: fileID, progress: report)
+        } catch {
+            // The reader closed before the File arrived: it carries on as a
+            // Download in the background, so the wait isn't lost. It starts
+            // over there, as this transfer can't be handed to iOS partway.
+            if Task.isCancelled {
+                log("file \(fileID): the reader closed while it downloaded, so it carries on as a Download")
+                download([fileID])
+            }
+            throw error
+        }
         defer { try? FileManager.default.removeItem(at: downloaded) }
         switch try copies.publishFetched(fileID: fileID, from: downloaded) {
         case .found(let url):

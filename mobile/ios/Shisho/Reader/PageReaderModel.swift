@@ -55,6 +55,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     @ObservationIgnored private let onGone: @MainActor () -> Void
     @ObservationIgnored private let requestSync: @MainActor () -> Void
     @ObservationIgnored private var closed = false
+    @ObservationIgnored private var reloading: Task<Void, Never>?
     /// The File couldn't open for want of a connection: it opens once the
     /// connection is back.
     @ObservationIgnored private var waitingForConnection = false
@@ -371,7 +372,15 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     func connectionChanged(_ connection: Connection) {
         guard connection == .online, waitingForConnection, !closed else { return }
         waitingForConnection = false
-        Task { await load() }
+        reload()
+    }
+
+    /// Loads again, as Try Again and a connection coming back do. Closing
+    /// the reader cancels it, as it cancels the first load, so a download
+    /// under way carries on as a Download (`DownloadManager.fetchNow`).
+    func reload() {
+        reloading?.cancel()
+        reloading = Task { await load() }
     }
 
     func close() {
@@ -380,6 +389,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
             session.downloads.released(fileID: file.fileID)
         }
         closed = true
+        reloading?.cancel()
         turnWait?.cancel()
         tracker.close()
         placeWatch?.cancel()

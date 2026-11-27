@@ -80,7 +80,7 @@ struct PageReaderView: View {
     }
 
     private var status: some View {
-        ReaderStatus(phase: model.phase, download: model.download, foreground: Self.pageForeground) { Task { await model.load() } }
+        ReaderStatus(phase: model.phase, download: model.download, foreground: Self.pageForeground) { model.reload() }
     }
 
     // MARK: - Controls
