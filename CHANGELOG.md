@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-27
+
+### Features
+- Ready the Shisho app for its first release: avatars, To Read downloads, tag namespaces, and pre-release cleanup (#987)
+- Manage your reading record offline in the Shisho app on iOS, with Reading Stats, a Calendar, and a Home tab (#985)
+- Listen in the car with CarPlay, and make debug builds a separate Shisho Dev app (#981)
+- Replace median days to finish with reading pace and words read (#977)
+- Read comics and PDFs in the Shisho app on iOS (#978)
+- Count the words in reflowable ebooks (#974)
+- Download audiobooks and ebooks in the iOS app, and share a File out with current metadata (#973)
+- Reader display settings, fonts, and in-book search on iOS (#971)
+- Read an EPUB in the Shisho app on iOS (#968)
+- Clear a file's saved position from the book and file pages (#964)
+- The full audiobook player in the Shisho app on iOS, with Bookmarks that sync offline (#963)
+- Self-host fonts, fix the Japanese font, and add Geist Mono on web and iOS (#959)
+- Browse, search, and switch accounts offline in the Shisho app (#958)
+- Listen to audiobooks in the Shisho app on iOS, and sync listening done offline (#957)
+- Mark a Book as Reference for books you dip into (#956)
+- Sign into the Shisho app on iOS and browse Books offline (#950)
+
+### Bug Fixes
+- Make plugin order settings fit and scroll on phones (#988)
+- Stop the Shisho app crashing on iOS 26 when a Book's page shows its Rating (#986)
+- Remove only the copy an open downloaded when it won't open in the iOS readers (#980)
+- Count the Shisho app's comic and PDF pages as it saves them (#979)
+- Go back to a tab's first screen on iOS 26 after a search, and require a shard timing for every flow (#975)
+- Tell a server set up again apart from the one an app account was made on (#970)
+- Read large ebooks a part at a time in the web reader (#960)
+- Fix flaky tests and the reader and KOReader races behind them (#953)
+
+### Documentation
+- Require a capability for any app feature that needs something new from the server (#984)
+- Add ADR 0028 and glossary entry for the Reference Reading Status (#955)
+- List M4A and KePub on the docs homepage (#949)
+
+### Testing
+- Turn the fixed-layout book's pages one at a time, swiping again only while the page hasn't moved (#976)
+- Stop the harness's simulators downloading iOS assets, and remove temp folders of killed runs (#969)
+- Speed up the iOS checks: sign in without typing, poll the server, cached fixtures, and a simulator per worktree (#965)
+- Make the iOS harness flows tolerate CI simulator stalls (#961)
+
+### CI/CD
+- Gate the iOS unit tests and flows on a local signoff, trim the suite to 13 flows, and run it in parallel (#972)
+- Speed up the iOS flows on GitHub's runners and fix flaky flows (#966)
+
+### Other
+- Bump the minor-and-patch group with 9 updates (#952)
+- Bump the minor-and-patch group with 5 updates (#951)
+
 ## [0.9.0] - 2026-11-19
 
 ### Breaking Changes
