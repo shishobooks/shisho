@@ -27,6 +27,30 @@ import { useCan } from "@/hooks/useCan";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 
+// Each option's description shows only in the open list. The trigger shows
+// the label alone, or the description would set its width.
+const MODE_OPTIONS: {
+  description: string;
+  label: string;
+  value: PluginMode;
+}[] = [
+  {
+    description: "Also available for manual identification",
+    label: "For every new file",
+    value: "enabled",
+  },
+  {
+    description: "Skipped when new files are added",
+    label: "Only when manually identifying",
+    value: "manual_only",
+  },
+  {
+    description: "Plugin is inactive for this hook",
+    label: "Never",
+    value: "disabled",
+  },
+];
+
 const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
   { label: "Metadata Enricher", value: "metadataEnricher" },
   { label: "File Parser", value: "fileParser" },
@@ -176,7 +200,7 @@ export const AdvancedOrderSection = () => {
           {displayOrder.map((item, index) => (
             <div
               className={cn(
-                "flex items-center justify-between gap-3 rounded-md border p-3",
+                "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border p-3",
                 item.mode === "disabled"
                   ? "border-border/50 opacity-60"
                   : item.mode === "manual_only"
@@ -185,17 +209,24 @@ export const AdvancedOrderSection = () => {
               )}
               key={`${item.scope}/${item.plugin_id}`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1 sm:w-auto sm:flex-auto">
                 <span className="font-mono text-xs text-muted-foreground">
                   {index + 1}
                 </span>
-                <span className="text-sm">
+                <span className="min-w-0 break-words text-sm">
                   {getPluginName(item.scope, item.plugin_id)}
                 </span>
-                <Badge variant="secondary">{item.scope}</Badge>
+                <Badge
+                  className="max-w-full whitespace-normal break-all"
+                  variant="secondary"
+                >
+                  {item.scope}
+                </Badge>
               </div>
               {canWrite && (
-                <div className="flex items-center gap-1">
+                // On phones the controls take the line below the name, and the
+                // select's label wraps rather than being cut off.
+                <div className="ml-auto flex min-w-0 flex-1 items-center gap-1 sm:flex-none">
                   <Select
                     onValueChange={(value) =>
                       handleModeChange(index, value as PluginMode)
@@ -204,38 +235,34 @@ export const AdvancedOrderSection = () => {
                   >
                     <SelectTrigger
                       aria-label="When this plugin runs"
-                      className="h-8 w-auto gap-2 text-xs"
+                      className="h-auto min-h-8 min-w-0 flex-1 justify-start gap-2 whitespace-normal text-left text-xs sm:h-8 sm:w-auto sm:flex-none sm:whitespace-nowrap [&>span]:line-clamp-none sm:[&>span]:line-clamp-1 [&>svg]:ml-auto"
                     >
-                      <span className="text-muted-foreground">Runs:</span>
-                      <SelectValue />
+                      <span className="shrink-0 text-muted-foreground">
+                        Runs:
+                      </span>
+                      <SelectValue>
+                        {
+                          MODE_OPTIONS.find(
+                            (option) => option.value === item.mode,
+                          )?.label
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="enabled">
-                        <div>
-                          <div>For every new file</div>
-                          <div className="text-xs text-muted-foreground">
-                            Also available for manual identification
-                          </div>
-                        </div>
-                      </SelectItem>
-                      {selectedHookType === "metadataEnricher" && (
-                        <SelectItem value="manual_only">
+                      {MODE_OPTIONS.filter(
+                        (option) =>
+                          option.value !== "manual_only" ||
+                          selectedHookType === "metadataEnricher",
+                      ).map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
                           <div>
-                            <div>Only when manually identifying</div>
+                            <div>{option.label}</div>
                             <div className="text-xs text-muted-foreground">
-                              Skipped when new files are added
+                              {option.description}
                             </div>
                           </div>
                         </SelectItem>
-                      )}
-                      <SelectItem value="disabled">
-                        <div>
-                          <div>Never</div>
-                          <div className="text-xs text-muted-foreground">
-                            Plugin is inactive for this hook
-                          </div>
-                        </div>
-                      </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Button
