@@ -48,6 +48,7 @@ Once a library has namespaces:
 - The **Tags** page opens on the tags outside every namespace and adds a tab for each namespace, with a count of its tags.
 - In **Filter**, the tag picker can narrow to **All**, the plain **Tags**, or one namespace.
 - The book page lists each namespace as its own row after **Tags**, in the order the namespaces are listed in **Settings**.
+- The [Shisho app](./shisho-app.md#browsing-and-searching-offline) groups tags the same way.
 
 Namespaces only change how tags are displayed. Tag names stay as they are in Shisho, in sidecars, and in file metadata, so adding, renaming, or removing a namespace changes no tags. A library with no namespaces shows its tags as before.
 

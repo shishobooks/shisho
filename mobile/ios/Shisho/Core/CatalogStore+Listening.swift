@@ -71,6 +71,73 @@ struct JournalRow: Equatable, Sendable {
 }
 
 extension CatalogStore {
+    // MARK: - Schema
+
+    /// This installation's own place in each File, and the journal of
+    /// changes made on the device (ADR 0024), which can't be downloaded
+    /// again.
+    static func createJournal(_ db: Database) throws {
+        // This installation's own place in each File it played or read: an
+        // audiobook's in seconds, an ebook's as a CFI (seconds 0), and a
+        // Page-based File's as a 0-based page.
+        try db.create(table: "local_positions") { t in
+            t.primaryKey("file_id", .integer)
+            t.column("seconds", .double).notNull()
+            t.column("cfi", .text)
+            t.column("page", .integer)
+            t.column("percentage", .double).notNull()
+            t.column("updated_at", .double).notNull()
+            // When the server's place was from when this device first
+            // moved since its last sync.
+            t.column("base_occurred_at", .double)
+            // Another device's place that arrived while this one had
+            // moves of its own to send, offered until the user picks, with
+            // the name of the Device it's from.
+            t.column("offer_seconds", .double)
+            t.column("offer_cfi", .text)
+            t.column("offer_page", .integer)
+            t.column("offer_percentage", .double)
+            t.column("offer_occurred_at", .double)
+            t.column("offer_source", .text)
+            t.column("offer_device_id", .text)
+            t.column("offer_device_name", .text)
+        }
+        // Changes made on the device, oldest first, until the server
+        // takes them in. held_for is the capability list a server that
+        // didn't understand one listed then: it waits until that changes.
+        try db.create(table: "journal") { t in
+            t.autoIncrementedPrimaryKey("seq")
+            t.column("event_id", .text).notNull().unique()
+            t.column("type", .text).notNull()
+            t.column("at", .double).notNull()
+            t.column("payload", .blob).notNull()
+            t.column("file_id", .integer)
+            // The Book an event is about, so a Book's changes are found
+            // without reading every payload.
+            t.column("book_id", .integer).indexed()
+            // The Bookmark an event is about, so deleting one not yet sent
+            // drops its events.
+            t.column("bookmark_id", .text).indexed()
+            // Position events of one sitting replace each other until
+            // sent; the end of a File never is replaced.
+            t.column("coalesce_key", .text).indexed()
+            t.column("held_for", .text)
+            t.column("held_reason", .text)
+        }
+        // The sitting being timed, at most one.
+        try db.create(table: "open_sitting") { t in
+            t.primaryKey("id", .integer).check { $0 == 1 }
+            t.column("sitting", .blob).notNull()
+        }
+        // Changes the server refused, for the user to read.
+        try db.create(table: "journal_notes") { t in
+            t.autoIncrementedPrimaryKey("id")
+            t.column("at", .double).notNull()
+            t.column("event_type", .text).notNull()
+            t.column("reason", .text).notNull()
+        }
+    }
+
     // MARK: - Reading
 
     /// The audiobook File of bookID the Listen button plays: the one
@@ -257,6 +324,27 @@ extension CatalogStore {
     /// Saves the user's place in fileID locally and queues it for the server,
     /// in one transaction. Moves of one sitting replace each other until
     /// sent, but reaching the end is always sent.
+    /// The periodic save while playing: the place, and the sitting being
+    /// timed, in one write that doesn't wait, so the main thread never
+    /// waits behind a sync's write. It lands before any write made after it.
+    func recordListening(fileID: Int, seconds: Double, percentage: Double, at: Date, sitting: ListeningSitting) throws {
+        var payload = Shishoapp.JournalPositionPayload(fileId: fileID, seconds: seconds, percentage: min(1, max(0, percentage)),
+                                                       atEnd: false)
+        if sitting.fileID == fileID {
+            payload.listenedSeconds = sitting.played(at: at)
+            payload.listeningSince = JournalTime.string(sitting.startedAt)
+        }
+        let data = try JSONEncoder().encode(payload)
+        let kept = try JSONEncoder().encode(sitting)
+        let key = "position:\(fileID):\(String(sitting.startedAt.timeIntervalSince1970))"
+        writeQueued("file \(fileID): couldn't save the place", category: .player) { db in
+            try CatalogStore.writePosition(db, fileID: fileID, seconds: seconds, cfi: nil, percentage: percentage, at: at,
+                                           payload: data, coalesceKey: key)
+            try db.execute(sql: "INSERT INTO open_sitting (id, sitting) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET sitting = excluded.sitting",
+                           arguments: [kept])
+        }
+    }
+
     func recordPosition(fileID: Int, seconds: Double, percentage: Double, at: Date, atEnd: Bool,
                         sitting: ListeningSitting?) throws {
         var payload = Shishoapp.JournalPositionPayload(fileId: fileID, seconds: seconds, percentage: min(1, max(0, percentage)),

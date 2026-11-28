@@ -15,6 +15,8 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     /// The File's id, which a load reading it again never changes.
     nonisolated let id: Int
     private(set) var phase = ReaderModel.Phase.loading
+    /// How far the File's download has got while it opens.
+    let download = OpeningDownload()
     var chromeVisible = true
     /// The page the reader is on, 0-based.
     private(set) var page = 0
@@ -53,6 +55,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     @ObservationIgnored private let onGone: @MainActor () -> Void
     @ObservationIgnored private let requestSync: @MainActor () -> Void
     @ObservationIgnored private var closed = false
+    @ObservationIgnored private var reloading: Task<Void, Never>?
     /// The File couldn't open for want of a connection: it opens once the
     /// connection is back.
     @ObservationIgnored private var waitingForConnection = false
@@ -143,6 +146,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     /// the reader left off, here or on another device.
     func load() async {
         phase = .loading
+        download.reset()
         placeWatch?.cancel()
         fileWatch?.cancel()
         source = nil
@@ -167,7 +171,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
             } else {
                 // The pages are drawn from the whole File, so opening one
                 // downloads it, as a Download like any other.
-                let fetch = try await session.downloads.fetchNow(fileID: file.fileID)
+                let fetch = try await session.downloads.fetchNow(fileID: file.fileID, reporting: download.start())
                 url = fetch.url
                 // One a background transfer finished meanwhile is a Download
                 // like any other, kept if it won't open.
@@ -325,21 +329,13 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
 
     // MARK: - Settings
 
-    /// The server keeps the flow chosen here for the Book; an older one
-    /// can't, so it's kept on this device alone.
-    var flowSyncs: Bool {
-        session.capabilities.withLock { $0.contains(Shishoapp.Capability.pageFlow.rawValue) }
-    }
-
     /// Picks the flow for this Book, kept with it on the server, so it's
-    /// the flow on the web and every device too, or on this device when the
-    /// server can't keep it.
+    /// the flow on the web and every device too.
     func choose(_ flow: PageFlow) {
         chosenFlow = flow
         do {
-            let sync = flowSyncs
-            try session.store.choosePageFlow(flow, bookID: file.book.id, at: Date(), sync: sync)
-            if sync { requestSync() }
+            try session.store.choosePageFlow(flow, bookID: file.book.id, at: Date())
+            requestSync()
         } catch {
             log("couldn't save the flow: \(Diagnostics.describe(error))")
         }
@@ -376,7 +372,15 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     func connectionChanged(_ connection: Connection) {
         guard connection == .online, waitingForConnection, !closed else { return }
         waitingForConnection = false
-        Task { await load() }
+        reload()
+    }
+
+    /// Loads again, as Try Again and a connection coming back do. Closing
+    /// the reader cancels it, as it cancels the first load, so a download
+    /// under way carries on as a Download (`DownloadManager.fetchNow`).
+    func reload() {
+        reloading?.cancel()
+        reloading = Task { await load() }
     }
 
     func close() {
@@ -385,6 +389,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
             session.downloads.released(fileID: file.fileID)
         }
         closed = true
+        reloading?.cancel()
         turnWait?.cancel()
         tracker.close()
         placeWatch?.cancel()

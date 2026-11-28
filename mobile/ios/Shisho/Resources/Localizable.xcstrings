@@ -126,6 +126,16 @@
     "%@ of 5 stars" : {
 
     },
+    "%@ on %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ on %2$@"
+          }
+        }
+      }
+    },
     "%@ pages per hour" : {
 
     },
@@ -244,6 +254,12 @@
     "%@× real time" : {
 
     },
+    "%lld" : {
+
+    },
+    "%lld Books" : {
+
+    },
     "%lld Minutes" : {
 
     },
@@ -286,6 +302,9 @@
 
     },
     "-%@" : {
+
+    },
+    "1 Book" : {
 
     },
     "1 reread" : {
@@ -342,6 +361,9 @@
     "AirPlay" : {
 
     },
+    "All" : {
+
+    },
     "All Languages" : {
 
     },
@@ -355,6 +377,9 @@
 
     },
     "Also known as %@" : {
+
+    },
+    "Amber" : {
 
     },
     "Another sign-in to this server finished first. Sign in again to use this one." : {
@@ -396,6 +421,9 @@
     "Auto shows two pages side by side when the reader is wider than it is tall and has room for both." : {
 
     },
+    "Avatar" : {
+
+    },
     "Average Rating" : {
 
     },
@@ -409,6 +437,9 @@
 
     },
     "Black" : {
+
+    },
+    "Blue" : {
 
     },
     "Book" : {
@@ -459,6 +490,9 @@
     "Books in the Libraries you can access appear here." : {
 
     },
+    "Books to download from To Read" : {
+
+    },
     "Books with a file on this device." : {
 
     },
@@ -483,6 +517,12 @@
     "Books, series, people" : {
 
     },
+    "Briefcase" : {
+
+    },
+    "Brown" : {
+
+    },
     "Browse book series in your library" : {
 
     },
@@ -490,6 +530,9 @@
 
     },
     "Browse tags in your library" : {
+
+    },
+    "Building" : {
 
     },
     "Calendar" : {
@@ -504,7 +547,13 @@
     "Cancel Download" : {
 
     },
+    "Cat" : {
+
+    },
     "Ch. %@" : {
+
+    },
+    "Change avatar" : {
 
     },
     "Change or clear the filters to see more." : {
@@ -574,6 +623,12 @@
 
     },
     "Codec" : {
+
+    },
+    "Coffee" : {
+
+    },
+    "Color" : {
 
     },
     "Colorist" : {
@@ -666,6 +721,9 @@
     "Dismiss" : {
 
     },
+    "Dog" : {
+
+    },
     "Done" : {
 
     },
@@ -702,6 +760,9 @@
     "Download the rest · %@" : {
 
     },
+    "Download the top of To Read" : {
+
+    },
     "Download · %@" : {
 
     },
@@ -726,6 +787,9 @@
     "Downloading %@ again" : {
 
     },
+    "Downloading the book" : {
+
+    },
     "Downloading your library…" : {
 
     },
@@ -733,6 +797,9 @@
 
     },
     "Downloading, %@" : {
+
+    },
+    "Downloading…" : {
 
     },
     "Downloads" : {
@@ -849,6 +916,12 @@
     "Genres" : {
 
     },
+    "Ghost" : {
+
+    },
+    "Globe" : {
+
+    },
     "Go There" : {
 
     },
@@ -861,6 +934,18 @@
     "Goes to this moment" : {
 
     },
+    "Graduation cap" : {
+
+    },
+    "Green" : {
+
+    },
+    "Headphones" : {
+
+    },
+    "Heart" : {
+
+    },
     "Heatmap year" : {
 
     },
@@ -868,6 +953,12 @@
 
     },
     "Home" : {
+
+    },
+    "House" : {
+
+    },
+    "Icon" : {
 
     },
     "Image" : {
@@ -895,6 +986,12 @@
 
     },
     "Increase margins" : {
+
+    },
+    "Indigo" : {
+
+    },
+    "Initial" : {
 
     },
     "Inker" : {
@@ -946,6 +1043,9 @@
 
     },
     "Layout" : {
+
+    },
+    "Leaf" : {
 
     },
     "Leave it empty to remove the note." : {
@@ -1051,7 +1151,13 @@
     "Modified" : {
 
     },
+    "Moon" : {
+
+    },
     "More" : {
+
+    },
+    "Mountain" : {
 
     },
     "Move down" : {
@@ -1066,7 +1172,13 @@
     "Move up" : {
 
     },
+    "Music" : {
+
+    },
     "Name" : {
+
+    },
+    "Namespace: %@" : {
 
     },
     "Narrated by " : {
@@ -1314,6 +1426,15 @@
     "Opens the player" : {
 
     },
+    "Opens this account" : {
+
+    },
+    "Or open another account" : {
+
+    },
+    "Orange" : {
+
+    },
     "Organize your books into custom collections" : {
 
     },
@@ -1358,6 +1479,9 @@
     "Paginated" : {
 
     },
+    "Palette" : {
+
+    },
     "Password" : {
 
     },
@@ -1377,6 +1501,12 @@
 
     },
     "Picked from the page shapes until you choose." : {
+
+    },
+    "Picks a color and an icon for this account" : {
+
+    },
+    "Pink" : {
 
     },
     "Place in the book" : {
@@ -1508,6 +1638,9 @@
     "Recent Reference" : {
 
     },
+    "Red" : {
+
+    },
     "Reference" : {
 
     },
@@ -1620,10 +1753,10 @@
     "Right to left books turn the other way. Saved on this device." : {
 
     },
-    "Save" : {
+    "Rocket" : {
 
     },
-    "Saved for this book on this device." : {
+    "Save" : {
 
     },
     "Saved for this book." : {
@@ -1768,6 +1901,12 @@
     "Skip Forward" : {
 
     },
+    "Sky" : {
+
+    },
+    "Slate" : {
+
+    },
     "Sleep" : {
 
     },
@@ -1798,10 +1937,16 @@
     "Sorted by:" : {
 
     },
+    "Sparkles" : {
+
+    },
     "Speed" : {
 
     },
     "Speed %@" : {
+
+    },
+    "Star" : {
 
     },
     "Start date unknown" : {
@@ -1841,6 +1986,9 @@
     "Stop downloading this Book?" : {
 
     },
+    "Sun" : {
+
+    },
     "Supplement" : {
 
     },
@@ -1871,6 +2019,9 @@
     "Tap or drag the stars" : {
 
     },
+    "Teal" : {
+
+    },
     "That doesn't look like a server address. Try something like https://shisho.example.com." : {
 
     },
@@ -1889,6 +2040,9 @@
     "The calendar needs a connection" : {
 
     },
+    "The first Books on To Read download by themselves, with all their Files, so what's next is ready offline." : {
+
+    },
     "The font couldn't be imported." : {
 
     },
@@ -1898,6 +2052,16 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "The server at %1$@ was set up again since %2$@ signed in, so it's a different server now. Sign in again to start fresh on it. Changes this device hadn't sent were for the earlier server, so none go to this one."
+          }
+        }
+      }
+    },
+    "The server at %@ was set up again, so this device was signed out of %@ there. Sign in again to start fresh on it. Changes this device hadn't sent were for the earlier server, so none go to this one." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The server at %1$@ was set up again, so this device was signed out of %2$@ there. Sign in again to start fresh on it. Changes this device hadn't sent were for the earlier server, so none go to this one."
           }
         }
       }
@@ -1961,6 +2125,16 @@
     },
     "This device" : {
 
+    },
+    "This device was signed out of %@ on %@. Its library is still on this device; sign in again to keep syncing it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This device was signed out of %1$@ on %2$@. Its library is still on this device; sign in again to keep syncing it."
+          }
+        }
+      }
     },
     "This device was signed out of %@ on %@. Sign in again to keep syncing. Everything on this device is still here." : {
 
@@ -2069,6 +2243,9 @@
 
     },
     "View" : {
+
+    },
+    "Violet" : {
 
     },
     "Vol. %@" : {
@@ -2215,6 +2392,9 @@
 
     },
     "^[%lld result](inflect: true)" : {
+
+    },
+    "^[%lld tag](inflect: true)" : {
 
     },
     "^[%lld word](inflect: true)" : {

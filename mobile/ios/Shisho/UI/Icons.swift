@@ -17,6 +17,9 @@ enum Lucide: String, CaseIterable {
     case bookOpenCheck = "book-open-check"
     case bookmark
     case bookmarkPlus = "bookmark-plus"
+    case briefcase
+    case building2 = "building-2"
+    case cat
     case chartColumn = "chart-column"
     case check
     case chevronDown = "chevron-down"
@@ -28,17 +31,24 @@ enum Lucide: String, CaseIterable {
     case clock
     case clockArrowUp = "clock-arrow-up"
     case cloudUpload = "cloud-upload"
+    case coffee
+    case dog
     case download
     case ellipsis
     case file
     case fileSearch = "file-search"
     case fileX = "file-x"
+    case ghost
+    case globe
+    case graduationCap = "graduation-cap"
     case gripVertical = "grip-vertical"
     case headphones
+    case heart
     case history
     case house
     case languages
     case layers
+    case leaf
     case library
     case list
     case listFilter = "list-filter"
@@ -51,6 +61,9 @@ enum Lucide: String, CaseIterable {
     case minus
     case moon
     case moonFill = "moon-fill"
+    case mountain
+    case music
+    case palette
     case pause
     case pauseFill = "pause-fill"
     case pencil
@@ -59,6 +72,7 @@ enum Lucide: String, CaseIterable {
     case plus
     case refresh = "refresh-cw"
     case redo2 = "redo-2"
+    case rocket
     case rotateCcw = "rotate-ccw"
     case rotateCw = "rotate-cw"
     case search
@@ -67,11 +81,13 @@ enum Lucide: String, CaseIterable {
     case share
     case skipBack = "skip-back"
     case skipForward = "skip-forward"
+    case sparkles
     case square
     case squareCheck = "square-check-big"
     case star
     case starFill = "star-fill"
     case starHalfFill = "star-half-fill"
+    case sun
     case tags
     case trash = "trash-2"
     case triangleAlert = "triangle-alert"

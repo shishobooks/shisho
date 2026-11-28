@@ -25,7 +25,7 @@ var flowSeconds = map[string]float64{
 	"listen_to_the_end.yaml":          98,
 	"read_and_reopen.yaml":            160,
 	"read_fixed_layout.yaml":          76,
-	"reading_record_offline.yaml":     150,
+	"reading_record_offline.yaml":     160,
 	"reading_stats_offline.yaml":      170,
 	"reader_footnote.yaml":            185,
 	"reader_rapid_turns.yaml":         235,

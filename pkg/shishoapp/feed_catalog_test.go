@@ -534,3 +534,24 @@ func TestFeed_FileCarriesItsDetails(t *testing.T) {
 		cursor = next.Cursor
 	}
 }
+
+// A Book carries where the server keeps it, which the app's search index
+// holds as the server's does, and moving it sends the Book again.
+func TestFeed_BookCarriesItsFilepath(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Fiction")
+	f.addBook(1, 1, "Dune")
+	f.addUser()
+	credential := f.signIn()
+
+	resp := f.changes(credential, 0, 0)
+	book := entryOf(resp, FeedKindBook, 1)
+	require.NotNil(t, book)
+	assert.Equal(t, "/library/1", book.Book.Filepath)
+
+	f.exec(`UPDATE books SET filepath = '/library/Frank Herbert/Dune' WHERE id = 1`)
+	next := f.changes(credential, resp.Cursor, 0)
+	assert.Equal(t, []string{"book:1"}, summary(next))
+	assert.Equal(t, "/library/Frank Herbert/Dune", entryOf(next, FeedKindBook, 1).Book.Filepath)
+}

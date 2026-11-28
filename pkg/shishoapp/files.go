@@ -120,10 +120,9 @@ func (h *handler) fileCover(c echo.Context) error {
 }
 
 // page serves a thumbnail of one of a CBZ's or PDF's pages, 0-based, at a
-// size in the tiers cover URLs use, from the user's Libraries
-// (CapabilityPageImages). Only thumbnails: the reader draws its pages from
-// the downloaded File (ADR 0025), so the app never relies on whole pages
-// from the server.
+// size in the tiers cover URLs use, from the user's Libraries. Only
+// thumbnails: the reader draws its pages from the downloaded File (ADR
+// 0025), so the app never relies on whole pages from the server.
 func (h *handler) page(c echo.Context) error {
 	file, err := h.requireFile(c, false)
 	if err != nil {

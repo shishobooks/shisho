@@ -265,9 +265,9 @@ final class APIClient: Sendable {
     }
 
     /// The user's reading a day at a time for year, or the last 12 months,
-    /// for Reading Stats' Calendar (CapabilityReadingCalendar). A response
-    /// without its days, from something other than Shisho, is an error, so
-    /// the copy on the device stays.
+    /// for Reading Stats' Calendar. A response without its days, from
+    /// something other than Shisho, is an error, so the copy on the device
+    /// stays.
     func statsHeatmap(year: Int?) async throws -> Shishoapp.StatsHeatmapResponse {
         let query = year.map { [URLQueryItem(name: "year", value: String($0))] } ?? []
         let body = try await data("mobile/stats/heatmap", query: query)
@@ -324,7 +324,7 @@ final class APIClient: Sendable {
     }
 
     /// A CBZ's or PDF's page, 0-based, as a thumbnail at size pixels, for
-    /// the page grid of a File that isn't downloaded (CapabilityPageImages).
+    /// the page grid of a File that isn't downloaded.
     func pageThumbnail(fileID: Int, page: Int, size: Int) async throws -> Data {
         try await data("mobile/files/\(fileID)/pages/\(page)", query: [
             URLQueryItem(name: "size", value: String(size)),
@@ -336,25 +336,52 @@ final class APIClient: Sendable {
         baseURL.appendingPathComponent("mobile/files/\(fileID)/stream")
     }
 
-    /// The credential, protocol, and version as cookies, for the system
-    /// player, which makes its own requests and takes cookies but no
-    /// headers. The server takes the credential and protocol from cookies
-    /// on the stream route only, and they go only with requests for Files,
-    /// so a redirect elsewhere on the host doesn't carry the credential.
+    /// One field that says who's asking, sent with every request: as a
+    /// header, and as a cookie for the system player's streams, which take
+    /// cookies but no headers.
+    struct IdentityField: Equatable {
+        let header: String
+        let headerValue: String
+        let cookie: String
+        let cookieValue: String
+    }
+
+    /// Everything every request carries to say who's asking. Requests send
+    /// it as headers and streams as cookies (`streamCookies`), both from
+    /// here, so a field added later reaches the stream too. The server reads
+    /// the cookies it needs on the stream route only (`streamCookies` in
+    /// pkg/shishoapp/files.go); the others are ignored there.
+    var identity: [IdentityField] {
+        var fields = [
+            IdentityField(header: "X-Shisho-App-Protocol", headerValue: String(Installation.appProtocol),
+                          cookie: "shisho_app_protocol", cookieValue: String(Installation.appProtocol)),
+            // For the server's access log.
+            IdentityField(header: "X-Shisho-App-Version", headerValue: Installation.appVersion,
+                          cookie: "shisho_app_version", cookieValue: Installation.appVersion),
+        ]
+        if let credential {
+            fields.append(IdentityField(header: "Authorization", headerValue: "Bearer \(credential)",
+                                        cookie: "shisho_app_credential", cookieValue: credential))
+        }
+        let instance = instance.withLock { $0 }
+        if !instance.isEmpty {
+            fields.append(IdentityField(header: "X-Shisho-Instance", headerValue: instance,
+                                        cookie: "shisho_app_instance", cookieValue: instance))
+        }
+        return fields
+    }
+
+    /// The identity as cookies, for the system player, which makes its own
+    /// requests and takes cookies but no headers. They go only with requests
+    /// for Files, so a redirect elsewhere on the host doesn't carry the
+    /// credential.
     var streamCookies: [HTTPCookie] {
         // As the stream's URL spells it, so a path with spaces still matches.
         let files = baseURL.appendingPathComponent("mobile/files")
         let path = (URLComponents(url: files, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? files.path) + "/"
-        let values = [
-            ("shisho_app_credential", credential),
-            ("shisho_app_protocol", String(Installation.appProtocol)),
-            // For the server's access log, as the header names it elsewhere.
-            ("shisho_app_version", Installation.appVersion),
-        ]
-        return values.compactMap { name, value in
-            guard let value else { return nil }
+        return identity.compactMap { field in
             var properties: [HTTPCookiePropertyKey: Any] = [
-                .name: name, .value: value, .path: path, .originURL: baseURL,
+                .name: field.cookie, .value: field.cookieValue, .path: path, .originURL: baseURL,
             ]
             if baseURL.scheme == "https" {
                 properties[.secure] = "TRUE"
@@ -377,8 +404,11 @@ final class APIClient: Sendable {
 
     /// A File's Original File (ADR 0022), downloaded to a temporary file
     /// the caller moves where it keeps it.
-    func download(fileID: Int) async throws -> URL {
-        try await fetchFile(request("mobile/files/\(fileID)/download", accept: "*/*"), session: session).0
+    /// progress hears how far it has got, from 0 to 1, when the server
+    /// says how big the File is.
+    func download(fileID: Int, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
+        try await fetchFile(request("mobile/files/\(fileID)/download", accept: "*/*"), session: session,
+                            progress: progress.map(TransferProgress.init(report:))).0
     }
 
     /// A File's Generated File, which carries Shisho's current metadata, for
@@ -405,12 +435,14 @@ final class APIClient: Sendable {
         }
     }
 
-    private func fetchFile(_ request: URLRequest, session: URLSession) async throws -> (URL, URLResponse) {
+    private func fetchFile(_ request: URLRequest, session: URLSession,
+                           progress: TransferProgress? = nil) async throws -> (URL, URLResponse) {
         guard reachability.allowsRequests else { throw APIError.unreachable("offline") }
         let file: URL
         let response: URLResponse
+        defer { progress?.stop() }
         do {
-            (file, response) = try await session.download(for: request)
+            (file, response) = try await session.download(for: request, delegate: progress)
         } catch {
             reachability.failed(error)
             throw APIClient.transportError(error)
@@ -486,15 +518,9 @@ final class APIClient: Sendable {
         }
         var request = URLRequest(url: components.url!)
         request.httpMethod = method
-        request.setValue(String(Installation.appProtocol), forHTTPHeaderField: "X-Shisho-App-Protocol")
-        request.setValue(Installation.appVersion, forHTTPHeaderField: "X-Shisho-App-Version")
         request.setValue(accept, forHTTPHeaderField: "Accept")
-        if let credential {
-            request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
-        }
-        let instance = instance.withLock { $0 }
-        if !instance.isEmpty {
-            request.setValue(instance, forHTTPHeaderField: "X-Shisho-Instance")
+        for field in identity {
+            request.setValue(field.headerValue, forHTTPHeaderField: field.header)
         }
         if let body {
             request.httpBody = body

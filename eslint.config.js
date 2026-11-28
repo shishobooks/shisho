@@ -261,6 +261,7 @@ export default tseslint.config(
         TO_READ: "readonly",
         LIST: "readonly",
         LIST_BOOK: "readonly",
+        RANGE: "readonly",
       },
     },
   },

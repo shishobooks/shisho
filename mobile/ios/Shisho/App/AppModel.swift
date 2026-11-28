@@ -21,35 +21,22 @@ final class AccountSession {
     let capabilities: OSAllocatedUnfairLock<[String]>
 
     @MainActor
-    init(account: Account, credential: String, onCapabilities: @escaping @Sendable ([String]) -> Void,
-         onInstance: @escaping @Sendable (String) -> Void = { _ in }) throws {
+    init(account: Account, credential: String, onCapabilities: @escaping @Sendable ([String]) -> Void) throws {
         self.account = account
         let capabilities = OSAllocatedUnfairLock(initialState: account.capabilities)
         self.capabilities = capabilities
         client = APIClient(
-            baseURL: account.serverURL, credential: credential, instanceID: account.instanceID ?? "",
+            baseURL: account.serverURL, credential: credential, instanceID: account.instanceID,
             onCapabilities: { listed in
                 capabilities.withLock { $0 = listed }
                 onCapabilities(listed)
-            },
-            onInstance: onInstance
+            }
         )
         try FileManager.default.createDirectory(at: account.folder, withIntermediateDirectories: true)
         store = try CatalogStore(path: AccountData(accountID: account.id).catalogPath)
         sync = SyncEngine(client: client, store: store, deviceID: account.deviceID) { capabilities.withLock { $0 } }
         covers = CoverCache(client: client, accountID: account.id, renderKey: account.thumbnailRenderKey)
-        try? FileManager.default.removeItem(at: AccountData(accountID: account.id).legacyEbookFolder)
         downloads = DownloadManager(account: account, client: client, store: store)
-    }
-
-    /// The server lists sharing a File out with its current metadata.
-    var sharesFiles: Bool {
-        capabilities.withLock { $0.contains(Shishoapp.Capability.shareFiles.rawValue) }
-    }
-
-    /// The server sends a comic's or PDF's pages as thumbnails.
-    var sendsPageImages: Bool {
-        capabilities.withLock { $0.contains(Shishoapp.Capability.pageImages.rawValue) }
     }
 }
 
@@ -77,14 +64,16 @@ final class AppModel {
     static let shared = AppModel()
 
     private let accounts = AccountStore()
+    /// Each account's color and icon on this device.
+    let looks = AccountLooks()
 
     private(set) var session: AccountSession? {
         didSet { sessionChanged(from: oldValue) }
     }
     private(set) var syncStatus: SyncStatus = .idle
     /// The capabilities the signed-in account's server listed last, so a
-    /// feature that writes an event type it doesn't list stays hidden (ADR
-    /// 0024).
+    /// feature that needs one stays hidden on a server that doesn't list it
+    /// (ADR 0020). Protocol 1 has none beyond its baseline.
     private(set) var capabilities: Set<String> = []
     /// The signed-in account's audiobook player.
     private(set) var player: AudioPlayer?
@@ -178,6 +167,9 @@ final class AppModel {
     /// The account signed out because the server at its address is no longer
     /// the one it was made on, which the sign-in screen explains instead.
     private(set) var serverReplacedAccountID: String?
+    /// An account the server signed out while another took over, which the
+    /// tabs' notices say until dismissed or it signs in again.
+    private(set) var endedSignIn: Account?
 
     init() {
         ReaderPagePool.loadPreviewSupport()
@@ -567,9 +559,12 @@ final class AppModel {
         await syncNow()
     }
 
-    /// The account's server lists capability.
-    func offers(_ capability: Shishoapp.Capability) -> Bool {
-        capabilities.contains(capability.rawValue)
+    /// The account's server lists capability, by the name the server
+    /// lists it under. Nothing calls it yet: the first capability added after
+    /// protocol 1's baseline will, to hide its feature on a server that
+    /// doesn't list it.
+    func offers(_ capability: String) -> Bool {
+        capabilities.contains(capability)
     }
 
     /// Records a change to the user's reading record: it shows at once, and
@@ -577,7 +572,7 @@ final class AppModel {
     /// A List it makes returns its id here.
     @discardableResult
     func change(_ change: ReadingChange) -> Int? {
-        guard let session, offers(change.capability) else { return nil }
+        guard let session else { return nil }
         do {
             let made = try session.store.record(change)
             if case .clearPosition(let fileID) = change {
@@ -680,13 +675,8 @@ final class AppModel {
             id: UUID().uuidString.lowercased(), serverURL: address.url, username: response.user.username,
             userID: response.user.id, deviceID: response.deviceId, serverVersion: response.serverVersion,
             thumbnailRenderKey: response.server.thumbnailRenderKey, capabilities: response.server.capabilities,
-            signedOut: false
+            signedOut: false, instanceID: instanceID
         )
-        // An account saved before servers had an instance id adopts the
-        // first one it sees; a server too old to send one changes nothing.
-        if !instanceID.isEmpty {
-            account.instanceID = instanceID
-        }
         account.username = response.user.username
         account.deviceID = response.deviceId
         account.serverVersion = response.serverVersion
@@ -752,6 +742,10 @@ final class AppModel {
         session = opened
         signedOutAccount = nil
         serverReplacedAccountID = nil
+        // Signed in again, or in its place on a server set up again.
+        if endedSignIn.map({ $0.id == account.id || $0.id == replaced?.id }) == true {
+            endedSignIn = nil
+        }
         addingAccount = false
         tab = .home
         // Changes that couldn't be counted are said too. Without a
@@ -838,7 +832,7 @@ final class AppModel {
             signedOutAccount = nil
             syncStatus = .idle
             // Another account still signed in takes over.
-            if let next = accounts.accounts.first(where: { !$0.signedOut && $0.id != accountID && Keychain.credential(for: $0.id) != nil }) {
+            if let next = AccountSwitching.next(after: accountID, in: accounts.accounts, hasCredential: { Keychain.credential(for: $0) != nil }) {
                 switchAccount(to: next.id)
             }
         }
@@ -902,7 +896,7 @@ final class AppModel {
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
                 do {
-                    try await sync.sendJournal()
+                    try await sync.sendJournalCheckingFirst()
                 } catch {
                     await Diagnostics.shared.log(.sync, "changes not sent before signing out: \(Diagnostics.describe(error))")
                 }
@@ -914,18 +908,35 @@ final class AppModel {
     }
 
     /// The server ended the sign-in of session's account. Its data stays,
-    /// waiting for the same user to sign in again.
+    /// waiting for the same user to sign in again. Another account still
+    /// signed in takes over, as when the user signs out, with a notice
+    /// saying so; with none, the sign-in screen opens for it.
     private func handleSignedOut(_ ended: AccountSession, serverReplaced: Bool = false) {
         guard ended === session else { return }
         syncs.stop()
         guard var account = stored(ended.account.id) else { return }
         account.signedOut = true
         Keychain.removeCredential(for: account.id)
+        serverReplacedAccountID = serverReplaced ? account.id : nil
+        syncStatus = .idle
+        if let next = AccountSwitching.next(after: account.id, in: accounts.accounts, hasCredential: { Keychain.credential(for: $0) != nil }) {
+            accounts.save(account, makeCurrent: false)
+            endedSignIn = account
+            switchAccount(to: next.id)
+            return
+        }
         accounts.save(account)
         signedOutAccount = account
-        serverReplacedAccountID = serverReplaced ? account.id : nil
         session = nil
-        syncStatus = .idle
+    }
+
+    /// The accounts the sign-in screen offers to switch to instead.
+    var otherSignedInAccounts: [Account] {
+        AccountSwitching.signedIn(in: allAccounts, except: signedOutAccount?.id, hasCredential: { Keychain.credential(for: $0) != nil })
+    }
+
+    func dismissEndedSignIn() {
+        endedSignIn = nil
     }
 
     // MARK: - Syncing
@@ -1056,14 +1067,11 @@ final class AppModel {
         }
     }
 
-    /// The account's session, whose responses keep its capabilities current,
-    /// and tell an account from before instance ids its server's.
+    /// The account's session, whose responses keep its capabilities current.
     private func openSession(account: Account, credential: String) throws -> AccountSession {
         let accountID = account.id
         return try AccountSession(account: account, credential: credential, onCapabilities: { [weak self] listed in
             Task { @MainActor in self?.recordCapabilities(listed, accountID: accountID) }
-        }, onInstance: { [weak self] instanceID in
-            Task { @MainActor in self?.recordInstance(instanceID, accountID: accountID) }
         })
     }
 
@@ -1071,7 +1079,7 @@ final class AppModel {
 
     /// Whether to download every cover on Wi-Fi, for every account on this
     /// device. Off until the user turns it on.
-    var prefetchesCovers = AppModel.storedPrefetchesCovers {
+    var prefetchesCovers = UserDefaults.standard.bool(forKey: AppModel.prefetchCoversKey) {
         didSet {
             guard prefetchesCovers != oldValue else { return }
             UserDefaults.standard.set(prefetchesCovers, forKey: AppModel.prefetchCoversKey)
@@ -1084,20 +1092,6 @@ final class AppModel {
     }
 
     private static let prefetchCoversKey = "prefetchCovers"
-
-    /// The setting, or, before it applied to every account, on when any
-    /// account had it on.
-    private static var storedPrefetchesCovers: Bool {
-        let defaults = UserDefaults.standard
-        if defaults.object(forKey: prefetchCoversKey) != nil {
-            return defaults.bool(forKey: prefetchCoversKey)
-        }
-        let before = defaults.dictionaryRepresentation().contains { key, value in
-            key.hasPrefix(prefetchCoversKey + ".") && (value as? Bool) == true
-        }
-        defaults.set(before, forKey: prefetchCoversKey)
-        return before
-    }
 
     @ObservationIgnored private var onWiFi = false
     /// The network as Downloads weigh it.
@@ -1178,17 +1172,8 @@ final class AppModel {
         if capabilities != Set(listed) {
             capabilities = Set(listed)
         }
-        player?.capabilitiesChanged(listed)
         guard account.capabilities != listed else { return }
         account.capabilities = listed
-        accounts.save(account, makeCurrent: false)
-    }
-
-    /// An account saved before servers had an instance id adopts the first
-    /// one its server's responses carry.
-    private func recordInstance(_ instanceID: String, accountID: String) {
-        guard var account = stored(accountID), account.instanceID?.isEmpty ?? true else { return }
-        account.instanceID = instanceID
         accounts.save(account, makeCurrent: false)
     }
 

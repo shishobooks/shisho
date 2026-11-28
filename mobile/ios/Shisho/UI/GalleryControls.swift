@@ -388,7 +388,7 @@ private struct FilterSheet: View {
                                options: options?.genres ?? [], selected: $model.filter.genres)
                 case .tags:
                     NamePicker(title: "Tags", prompt: String(localized: "Search tags…"), empty: String(localized: "No tags found."),
-                               options: options?.tags ?? [], selected: $model.filter.tags)
+                               options: options?.tags ?? [], selected: $model.filter.tags, namespaces: options?.tagNamespaces ?? [])
                 }
             }
         }
@@ -509,14 +509,59 @@ private struct NamePicker: View {
     let empty: String
     let options: [FilterOption]
     @Binding var selected: Set<String>
+    /// Tag namespaces, which the list can narrow to, as the web's tag
+    /// picker can.
+    var namespaces: [String] = []
     @State private var query = ""
+    @State private var scope: TagScope = .all
 
     private var shown: [FilterOption] {
         let query = query.trimmingCharacters(in: .whitespaces)
-        return query.isEmpty ? options : options.filter { $0.name.localizedStandardContains(query) }
+        return options.filter { option in
+            option.namespaces.contains { scope.contains(namespace: $0) }
+                && (query.isEmpty || option.name.localizedStandardContains(query)
+                    || (option.shownName?.localizedStandardContains(query) ?? false))
+        }
+    }
+
+    /// The namespace to name over an option, under All: the one it's in in
+    /// every Library that has it.
+    private func namespace(_ option: FilterOption) -> String? {
+        guard scope == .all, option.namespaces.count == 1 else { return nil }
+        return option.namespaces[0]
+    }
+
+    /// The name to show: without the prefix where the list shows its
+    /// namespace, as a namespace's own scope and its label under All do.
+    private func label(_ option: FilterOption) -> String {
+        switch scope {
+        case .namespace: option.shownName ?? option.name
+        case .all: namespace(option) == nil ? option.name : option.shownName ?? option.name
+        case .plain: option.name
+        }
+    }
+
+    private var scopeTabs: [TagScopeTabs.Tab] {
+        [TagScopeTabs.Tab(scope: .all, label: String(localized: "All")), TagScopeTabs.Tab(scope: .plain, label: String(localized: "Tags"))]
+            + namespaces.map { TagScopeTabs.Tab(scope: .namespace($0), label: $0) }
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            if !namespaces.isEmpty {
+                TagScopeTabs(tabs: scopeTabs, scope: $scope)
+                    .padding(.vertical, 4)
+            }
+            list
+        }
+        .background(Theme.background)
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
+    }
+
+    private var list: some View {
         List(shown) { option in
             // Ignoring case as the filter's SQLite NOCASE does, for ASCII
             // letters only, so a pick spelled differently in another Library
@@ -529,9 +574,17 @@ private struct NamePicker: View {
                 HStack(spacing: 12) {
                     Icon(on ? .squareCheck : .square, size: 20)
                         .foregroundStyle(on ? Theme.primary : Theme.mutedForeground)
-                    Text(option.name)
-                        .font(.geist(.body))
-                        .foregroundStyle(Theme.foreground)
+                    VStack(alignment: .leading, spacing: 1) {
+                        // Under All, a namespaced tag names its namespace.
+                        if let namespace = namespace(option) {
+                            Text(namespace)
+                                .font(.geist(.caption2, weight: .semibold))
+                                .foregroundStyle(Theme.mutedForeground)
+                        }
+                        Text(label(option))
+                            .font(.geist(.body))
+                            .foregroundStyle(Theme.foreground)
+                    }
                     Spacer(minLength: 8)
                     Text(verbatim: "\(option.count)")
                         .font(.geist(.caption))
@@ -557,10 +610,6 @@ private struct NamePicker: View {
                     .foregroundStyle(Theme.mutedForeground)
             }
         }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.visible, for: .navigationBar)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
     }
 }
 

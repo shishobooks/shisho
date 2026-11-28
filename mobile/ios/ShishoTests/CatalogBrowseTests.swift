@@ -61,6 +61,64 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(detail.files.first?.narratorIDs, [2])
     }
 
+    /// A Library with tag namespaces, as the web shows them (metadata.md,
+    /// Tag Namespaces): each tag split by its own Library's namespaces.
+    func testTagNamespacesSplitTagsByTheirLibrary() throws {
+        let doujin = #"{"kind":"library","id":2,"library_id":2,"library":{"id":2,"name":"Doujin","cover_aspect_ratio":"book","tag_namespaces":["Circle","Magazine"]}}"#
+        let tags = """
+            {"kind":"tag","id":2,"library_id":2,"tag":{"id":2,"library_id":2,"name":"Circle: Moon Factory","aliases":[]}},
+            {"kind":"tag","id":3,"library_id":2,"tag":{"id":3,"library_id":2,"name":"Full Color","aliases":[]}},
+            {"kind":"tag","id":4,"library_id":1,"tag":{"id":4,"library_id":1,"name":"Circle: Not Here","aliases":[]}}
+            """
+        // Each Book's own tags in place of the fixture's.
+        let desert = #""tags":[{"tag_id":1,"name":"Desert"}]"#
+        let tagged = book(3, "Bloom", library: 2)
+            .replacingOccurrences(of: desert, with: #""tags":[{"tag_id":3,"name":"Full Color"},{"tag_id":2,"name":"Circle: Moon Factory"}]"#)
+        let other = book(4, "Other").replacingOccurrences(of: desert, with: #""tags":[{"tag_id":4,"name":"Circle: Not Here"}]"#)
+        try store.apply(page(#"{"entries":[\#(library(1, "Fiction")),\#(doujin),\#(book(1, "Dune")),\#(tagged),\#(other),\#(resources),\#(tags)],"cursor":9}"#))
+
+        XCTAssertEqual(try store.pool.read { try CatalogStore.tagNamespaces($0, libraryID: 2) }, ["Circle", "Magazine"])
+        XCTAssertEqual(try store.pool.read { try CatalogStore.tagNamespaces($0, libraryID: 1) }, [])
+        XCTAssertEqual(try store.pool.read { try CatalogStore.tagNamespaces($0, libraryID: nil) }, ["Circle", "Magazine"],
+                       "every Library's, for every Library at once")
+
+        let listed = try store.pool.read { try CatalogStore.resources($0, kind: .tag, libraryID: nil) }
+        let byID = Dictionary(uniqueKeysWithValues: listed.map { ($0.id, $0) })
+        XCTAssertEqual(byID[2]?.namespace, "Circle")
+        XCTAssertEqual(byID[2]?.shownName, "Moon Factory")
+        XCTAssertNil(byID[4]?.namespace, "Fiction has no Circle namespace")
+        XCTAssertEqual(byID[4]?.shownName, "Circle: Not Here")
+
+        let detail = try XCTUnwrap(store.pool.read { try CatalogStore.resource($0, kind: .tag, id: 2) })
+        XCTAssertEqual(detail.namespace, "Circle")
+        XCTAssertEqual(detail.shownName, "Moon Factory")
+        XCTAssertEqual(try store.pool.read { try CatalogStore.book($0, id: 3) }?.tagNamespaces, ["Circle", "Magazine"])
+        XCTAssertEqual(try store.pool.read { try CatalogStore.filterOptions($0, libraryID: 2) }.tagNamespaces, ["Circle", "Magazine"])
+
+        // The tag picker, for every Library at once, splits each tag by its
+        // own Library too.
+        let picked = try store.pool.read { try CatalogStore.filterOptions($0, libraryID: nil) }.tags
+        let byName = Dictionary(uniqueKeysWithValues: picked.map { ($0.name, $0) })
+        XCTAssertEqual(byName["Circle: Moon Factory"]?.namespaces, ["Circle"])
+        XCTAssertEqual(byName["Circle: Moon Factory"]?.shownName, "Moon Factory")
+        XCTAssertEqual(byName["Circle: Not Here"]?.namespaces, [nil], "Fiction has no Circle namespace")
+        XCTAssertNil(byName["Circle: Not Here"]?.shownName, "shown whole")
+        XCTAssertEqual(byName["Full Color"]?.namespaces, [nil])
+
+        // A third Library lists the same namespace in other letters, with a
+        // Book of the same tag: one namespace, its Books counted together.
+        let zines = #"{"kind":"library","id":3,"library_id":3,"library":{"id":3,"name":"Zines","cover_aspect_ratio":"book","tag_namespaces":["circle"]}}"#
+        let zine = book(5, "Zine", library: 3).replacingOccurrences(of: desert, with: #""tags":[{"tag_id":5,"name":"Circle: Moon Factory"}]"#)
+        try store.apply(page(#"{"entries":[\#(zines),\#(zine),{"kind":"tag","id":5,"library_id":3,"tag":{"id":5,"library_id":3,"name":"Circle: Moon Factory","aliases":[]}}],"cursor":10}"#))
+        let both = try store.pool.read { try CatalogStore.filterOptions($0, libraryID: nil) }.tags.first { $0.name == "Circle: Moon Factory" }
+        XCTAssertEqual(both?.count, 2)
+        XCTAssertEqual(both?.namespaces.count, 1)
+
+        // A Library sent again with its namespaces changed.
+        try store.apply(page(#"{"entries":[{"kind":"library","id":2,"library_id":2,"library":{"id":2,"name":"Doujin","cover_aspect_ratio":"book","tag_namespaces":[]}}],"cursor":11}"#))
+        XCTAssertNil(try store.pool.read { try CatalogStore.resource($0, kind: .tag, id: 2) }?.namespace)
+    }
+
     func testBrowsesResources() throws {
         try catalog()
         let series = try store.pool.read { try CatalogStore.resources($0, kind: .series, libraryID: nil) }
@@ -108,6 +166,30 @@ final class CatalogBrowseTests: XCTestCase {
         // A deleted Book leaves the index.
         try store.apply(page(#"{"entries":[{"kind":"book","id":2,"deleted":true,"library_id":1}],"cursor":12}"#))
         XCTAssertEqual(try search("Children").books, [])
+    }
+
+    /// As the web's search does, a Book is found by its folder and by the
+    /// paths of its Files, supplements included.
+    func testSearchesFileNamesAndFolders() throws {
+        let folder = "/library/Frank Herbert/Dune Deluxe Edition"
+        func located(_ folder: String, _ file: String) -> String {
+            book(1, "Dune", extra: #","filepath":"\#(folder)""#)
+                .replacingOccurrences(of: #""display_name":"Dune.epub","#, with: #""display_name":"Dune.epub","filepath":"\#(folder)/\#(file)","#)
+                .replacingOccurrences(of: #"}]}],"cover_version""#, with: #"}]},{"id":11,"file_type":"pdf","file_role":"supplement","size_bytes":1,"#
+                    + #""display_name":"Maps","filepath":"\#(folder)/maps-of-caladan.pdf"}],"cover_version""#)
+        }
+        try store.apply(page(#"{"entries":[\#(library(1, "Fiction")),\#(located(folder, "arrakeen-copy.epub")),\#(book(2, "Dune Messiah")),\#(resources)],"cursor":9}"#),
+                        access: Shishoapp.FeedAccess(libraryIds: [1], listIds: []))
+        let search = { (text: String) in try self.store.pool.read { try CatalogStore.search($0, text: text, libraryID: nil) }.books.map(\.id) }
+        XCTAssertEqual(try search("Deluxe"), [1], "a word of the Book's folder")
+        XCTAssertEqual(try search("arrakeen"), [1], "a word of a File's name")
+        XCTAssertEqual(try search("caladan"), [1], "a supplement's name")
+
+        // A Book moved on the server is found where it is now.
+        try store.apply(page(#"{"entries":[\#(located("/library/Herbert/Dune", "sietch-tabr.epub"))],"cursor":10}"#))
+        XCTAssertEqual(try search("Deluxe"), [])
+        XCTAssertEqual(try search("arrakeen"), [])
+        XCTAssertEqual(try search("sietch"), [1])
     }
 
     func testReadingStatusAndRating() throws {

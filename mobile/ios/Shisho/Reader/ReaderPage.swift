@@ -21,6 +21,12 @@ final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
     /// The book, mapped rather than read: a page asks for a part at a time,
     /// and only the parts it asks for come into memory.
     private var book: Data?
+    /// Book requests answered off the main thread and not stopped yet: a
+    /// task WebKit stopped mustn't be answered.
+    private var pending: Set<ObjectIdentifier> = []
+    /// A range at least this big is copied off the main thread, as a
+    /// photo cookbook's images are: copying it faults in megabytes.
+    private static let copiedOffMain = 256 * 1024
 
     func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
         guard let url = task.request.url else { return }
@@ -66,10 +72,26 @@ final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
             respond(task, url: url, status: 416, data: Data(), headers: ["Content-Range": "bytes */\(book.count)"])
             return
         }
-        respond(task, url: url, status: 206, data: book.subdata(in: range), headers: [
+        let headers = [
             "Content-Type": "application/octet-stream",
             "Content-Range": "bytes \(range.lowerBound)-\(range.upperBound - 1)/\(book.count)",
-        ])
+        ]
+        guard range.count >= Self.copiedOffMain else {
+            respond(task, url: url, status: 206, data: book.subdata(in: range), headers: headers)
+            return
+        }
+        let id = ObjectIdentifier(task)
+        pending.insert(id)
+        Task {
+            let data = await Self.copy(book, range)
+            guard pending.remove(id) != nil else { return }
+            respond(task, url: url, status: 206, data: data, headers: headers)
+        }
+    }
+
+    @concurrent
+    private nonisolated static func copy(_ book: Data, _ range: Range<Int>) async -> Data {
+        book.subdata(in: range)
     }
 
     private func respond(_ task: any WKURLSchemeTask, url: URL, status: Int, data: Data, headers: [String: String]) {
@@ -81,7 +103,9 @@ final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
         task.didFinish()
     }
 
-    func webView(_ webView: WKWebView, stop task: any WKURLSchemeTask) {}
+    func webView(_ webView: WKWebView, stop task: any WKURLSchemeTask) {
+        pending.remove(ObjectIdentifier(task))
+    }
 }
 
 /// A single range from an HTTP Range header, as the reader's page asks for

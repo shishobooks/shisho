@@ -62,15 +62,6 @@ func refByTitle(t *testing.T, refs []StatsBookRef, title string) StatsBookRef {
 	return StatsBookRef{}
 }
 
-// The server offers the calendar's routes.
-func TestCapabilities_ListReadingCalendar(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	rec := f.do(call{path: "/mobile/server", protocol: "1"})
-	require.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, strings.Split(rec.Header().Get(HeaderCapabilities), ","), CapabilityReadingCalendar)
-}
-
 // The heatmap route sends the last 12 months, or a year, a day at a time.
 func TestStatsHeatmap_SendsEachDaysTime(t *testing.T) {
 	t.Parallel()

@@ -506,7 +506,7 @@ func TestFeed_BookDocument(t *testing.T) {
 	duration := 1.5
 	words := 187240
 	assert.Equal(t, &FeedBook{
-		ID: 1, LibraryID: 1, Title: "Dune", Subtitle: &subtitle, SortTitle: "Dune",
+		ID: 1, LibraryID: 1, Title: "Dune", Subtitle: &subtitle, SortTitle: "Dune", Filepath: "/library/1",
 		CreatedAt: time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC),
 		Authors: []FeedAuthor{
 			{PersonID: 1, Name: "Frank Herbert", SortName: "Herbert, Frank"},
@@ -635,6 +635,29 @@ func TestFeed_LibraryDocumentCarriesTheUsersSort(t *testing.T) {
 	// Library 2's spec doesn't parse, and Library 3 has none: both are the
 	// default, which is empty.
 	assert.Equal(t, map[int]string{1: "author:asc,date_added:desc", 2: "", 3: ""}, sorts)
+}
+
+// A Library carries its tag namespaces, so the app groups tags as the web
+// does, and a change to them sends the Library again.
+func TestFeed_LibraryCarriesItsTagNamespaces(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Doujin")
+	f.addLibrary(2, "Fiction")
+	f.exec(`UPDATE libraries SET tag_namespaces = '["Circle","Magazine"]' WHERE id = 1`)
+	f.addUser()
+	credential := f.signIn()
+
+	namespaces := map[int][]string{}
+	resp := f.changes(credential, 0, 0)
+	for _, entry := range resp.Entries {
+		require.NotNil(t, entry.Library)
+		namespaces[entry.ID] = entry.Library.TagNamespaces
+	}
+	assert.Equal(t, map[int][]string{1: {"Circle", "Magazine"}, 2: {}}, namespaces)
+
+	f.exec(`UPDATE libraries SET tag_namespaces = '["Circle"]' WHERE id = 1`)
+	assert.ElementsMatch(t, []string{"library:1"}, summary(f.changes(credential, resp.Cursor, 0)))
 }
 
 // Deleting a Library deletes its saved sorts too, and that mustn't hide

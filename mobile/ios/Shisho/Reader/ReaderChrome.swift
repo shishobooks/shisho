@@ -107,17 +107,39 @@ struct ReaderCloseButton: View {
 /// background.
 struct ReaderStatus: View {
     let phase: ReaderModel.Phase
+    /// How far the book's download has got while it opens.
+    let download: OpeningDownload
     let foreground: Color
     let retry: () -> Void
 
     var body: some View {
         switch phase {
         case .loading:
-            ProgressView()
-                .controlSize(.large)
-                .tint(foreground)
-                .accessibilityLabel(Text("Opening the book"))
-                .accessibilityIdentifier("reader.loading")
+            VStack(spacing: 16) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(foreground)
+                if let fraction = download.fraction {
+                    VStack(spacing: 10) {
+                        Text("Downloading…")
+                            .font(.geist(.subheadline, weight: .medium))
+                        ProgressView(value: fraction)
+                            .tint(foreground)
+                            .frame(width: 180)
+                        Text(fraction, format: .percent.precision(.fractionLength(0)))
+                            .font(.geist(.footnote))
+                            .monospacedDigit()
+                            .opacity(0.7)
+                    }
+                    .foregroundStyle(foreground)
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: download.fraction == nil)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(download.fraction == nil ? Text("Opening the book") : Text("Downloading the book"))
+            .accessibilityValue(download.fraction.map { Text($0, format: .percent.precision(.fractionLength(0))) } ?? Text(verbatim: ""))
+            .accessibilityIdentifier("reader.loading")
         case .failed(let message):
             VStack(spacing: 14) {
                 Icon(.triangleAlert, size: 30, relativeTo: .title)
@@ -135,6 +157,36 @@ struct ReaderStatus: View {
             .accessibilityIdentifier("reader.error")
         case .reading:
             EmptyView()
+        }
+    }
+}
+
+/// How far a book's download has got while the reader opens it, from 0 to
+/// 1, or nil while nothing is known, as when it's already on the device.
+/// Its own object, so only the opening state redraws as it moves.
+@MainActor
+@Observable
+final class OpeningDownload {
+    private(set) var fraction: Double?
+    /// Bumped on each open, so a report from an earlier one is ignored.
+    @ObservationIgnored private var attempt = 0
+
+    /// Forgets the last open's download, as Try Again does.
+    func reset() {
+        attempt += 1
+        fraction = nil
+    }
+
+    /// Starts an open: the report to hand the download, which may be
+    /// called from any thread.
+    func start() -> @Sendable (Double) -> Void {
+        reset()
+        let current = attempt
+        return { [weak self] fraction in
+            Task { @MainActor in
+                guard let self, self.attempt == current else { return }
+                self.fraction = fraction
+            }
         }
     }
 }

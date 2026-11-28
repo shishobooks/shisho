@@ -39,6 +39,9 @@ type server struct {
 	mu  sync.Mutex
 	cmd *exec.Cmd
 	log *os.File
+	// appProtocols, when set, is the range of Shisho app protocols the
+	// server accepts in place of its own (acceptAppProtocols).
+	appProtocols string
 	// swap keeps one change of database at a time (fresh.go).
 	swap sync.Mutex
 }
@@ -93,7 +96,7 @@ func (s *server) Start(ctx context.Context) error {
 	}
 	cmd := exec.Command(s.binary) //nolint:noctx,gosec // The server this run built; Stop ends it, with its process group.
 	cmd.Dir = s.dir
-	cmd.Env = append(os.Environ(), s.env...)
+	cmd.Env = s.processEnv()
 	cmd.Stdout, cmd.Stderr = log, log
 	// Its own process group, so stopping the run stops it and nothing else.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -107,6 +110,48 @@ func (s *server) Start(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+// processEnv is the environment the server runs with: the harness's own
+// on top of the caller's, then a range of app protocols a flow set.
+func (s *server) processEnv() []string {
+	env := append(os.Environ(), s.env...)
+	if s.appProtocols != "" {
+		env = append(env, "SHISHO_DEV_APP_PROTOCOLS="+s.appProtocols)
+	}
+	return env
+}
+
+// acceptAppProtocols restarts the server accepting only the Shisho app
+// protocols in protocols, "MIN-MAX" as SHISHO_DEV_APP_PROTOCOLS takes it, on
+// the same address and data.
+// A server that was offline comes back.
+func (s *server) acceptAppProtocols(ctx context.Context, protocols string) error {
+	s.swap.Lock()
+	defer s.swap.Unlock()
+	s.Stop()
+	s.mu.Lock()
+	s.appProtocols = protocols
+	s.mu.Unlock()
+	return s.Start(ctx)
+}
+
+// ownAppProtocols puts back the server's own range of app protocols after
+// acceptAppProtocols changed it, stopping the server for the caller to
+// start again.
+func (s *server) ownAppProtocols() {
+	s.swap.Lock()
+	defer s.swap.Unlock()
+	s.mu.Lock()
+	changed := s.appProtocols != ""
+	s.mu.Unlock()
+	if !changed {
+		return
+	}
+	s.Stop()
+	s.mu.Lock()
+	s.appProtocols = ""
+	s.mu.Unlock()
 }
 
 func (s *server) running() bool {

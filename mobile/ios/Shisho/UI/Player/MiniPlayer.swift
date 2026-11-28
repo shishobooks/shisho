@@ -50,11 +50,7 @@ struct MiniPlayer: View {
             }
         }
         .overlay(alignment: .bottom) {
-            GeometryReader { geometry in
-                Rectangle()
-                    .fill(Theme.primary)
-                    .frame(width: geometry.size.width * fraction(player, file))
-            }
+            MiniPlayerProgress(player: player, duration: file.duration)
             .frame(height: 2)
             .background(Theme.foreground.opacity(0.1))
             .accessibilityHidden(true)
@@ -130,8 +126,21 @@ struct MiniPlayer: View {
         .contentShape(Rectangle())
     }
 
-    private func fraction(_ player: AudioPlayer, _ file: ListeningFile) -> CGFloat {
-        file.duration > 0 ? CGFloat(min(1, max(0, player.position / file.duration))) : 0
+}
+
+/// The line along the mini player's bottom, how far through the File
+/// playback is: its own view, so only it redraws as playback moves.
+private struct MiniPlayerProgress: View {
+    let player: AudioPlayer
+    let duration: Double
+
+    var body: some View {
+        let fraction = duration > 0 ? CGFloat(min(1, max(0, player.position / duration))) : 0
+        GeometryReader { geometry in
+            Rectangle()
+                .fill(Theme.primary)
+                .frame(width: geometry.size.width * fraction)
+        }
     }
 }
 

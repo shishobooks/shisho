@@ -23,6 +23,8 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ScrollTopMarker(space: "home")
                             .id(ScrollTop.anchor)
+                        AppNotices()
+                            .padding(.horizontal, GridLayout.margin)
                         if let current, let toRead, let reference, current.isEmpty, toRead.isEmpty, reference.isEmpty {
                             EmptyNotice(title: String(localized: "Nothing to pick up yet"),
                                         message: String(localized: "Books you're reading and Books on To Read appear here."),
@@ -61,9 +63,7 @@ struct HomeView: View {
                         }
                         VStack(spacing: 8) {
                             // In the web's user menu's order.
-                            if model.offers(.readingStats) {
-                                HomeLink(title: String(localized: "Reading Stats"), icon: .chartColumn, route: .stats, identifier: "reading.stats")
-                            }
+                            HomeLink(title: String(localized: "Reading Stats"), icon: .chartColumn, route: .stats, identifier: "reading.stats")
                             HomeLink(title: String(localized: "Reading History"), icon: .history, route: .history, identifier: "reading.history")
                         }
                         .padding(.horizontal, GridLayout.margin)

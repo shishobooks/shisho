@@ -69,6 +69,28 @@ final class ConnectionTests: XCTestCase {
         XCTAssertEqual(StubRecordingServer.requests, ["DELETE /mobile/device"])
     }
 
+    /// Signing out sends unsent changes first. The server may be back with
+    /// nothing having noticed yet, as when the connection returned moments
+    /// before, so it's asked first, as a sync asks, rather than failing at
+    /// once and keeping the changes on the device.
+    func testSendingBeforeSigningOutAsksTheServerFirst() async throws {
+        StubRecordingServer.reset()
+        let client = APIClient(baseURL: URL(string: "https://shisho.test")!, credential: "c",
+                               protocolClasses: [StubRecordingServer.self])
+        let store = try CatalogStore(path: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".sqlite").path)
+        try store.startOverIfNeeded()
+        _ = try await store.pool.write { db in
+            try CatalogStore.append(db, type: .readingPosition, at: Date(), payload: Data(#"{"file_id":1,"seconds":1,"percentage":0.1}"#.utf8),
+                                    fileID: nil, coalesceKey: nil)
+        }
+        client.reachability.failed(URLError(.timedOut))
+
+        // The stub's empty answer isn't a journal response; only what was
+        // asked matters here.
+        try? await SyncEngine(client: client, store: store).sendJournalCheckingFirst()
+        XCTAssertEqual(StubRecordingServer.requests, ["GET /mobile/server", "POST /mobile/journal"])
+    }
+
     /// A client known not to reach its server fails at once rather than
     /// waiting out a timeout.
     func testRequestsFailAtOnceWhileTheServerCantBeReached() async {

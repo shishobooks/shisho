@@ -60,7 +60,7 @@ struct DownloadControl: View {
     @Environment(AppModel.self) private var model
     let fileID: Int
     let label: String
-    let supported: Bool
+    let support: FileSupport
     let row: DownloadRow?
 
     private var status: DownloadStatus {
@@ -73,14 +73,14 @@ struct DownloadControl: View {
             case .notDownloaded, .failed:
                 Button { model.session?.downloads.download([fileID]) } label: {
                     Icon(.download, size: 18, relativeTo: nil)
-                        .foregroundStyle(supported ? Theme.primary : Theme.mutedForeground)
-                        .controlCircle(tinted: supported)
+                        .foregroundStyle(support.isSupported ? Theme.primary : Theme.mutedForeground)
+                        .controlCircle(tinted: support.isSupported)
                 }
-                .disabled(!supported)
-                .accessibilityLabel(supported ? String(localized: "Download \(label)") : String(localized: "Download \(label), not supported in this version of the app"))
+                .disabled(!support.isSupported)
+                .accessibilityLabel(support.downloadLabel(label))
                 .accessibilityValue(DownloadWords.status(status) ?? "")
                 // Downloading needs the server, as listening and reading do.
-                .modifier(NeedsConnection(available: !supported || model.connection == .online))
+                .modifier(NeedsConnection(available: !support.needsConnection(online: model.connection == .online)))
             case .waiting, .running:
                 let ring = DownloadRing(fraction: { if case .running(let fraction) = status { return fraction } else { return nil } }())
                     .controlCircle(tinted: true)
@@ -401,9 +401,14 @@ struct DownloadsView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         ScrollTopMarker(space: "downloads")
                             .id(ScrollTop.anchor)
-                        TabHeading(title: String(localized: "Downloads"))
-                            .padding(.top, 4)
-                            .padding(.bottom, -8)
+                        // With the heading, so they add no gap when there's
+                        // nothing to say.
+                        VStack(alignment: .leading, spacing: 0) {
+                            TabHeading(title: String(localized: "Downloads"))
+                                .padding(.top, 4)
+                            AppNotices()
+                        }
+                        .padding(.bottom, -8)
                         if let downloads {
                             summary(downloads)
                             if downloads.isEmpty {
@@ -549,10 +554,42 @@ private struct DownloadSettingsCard: View {
                           description: "A Download is removed once you listen to or read it to the end.",
                           isOn: $downloads.removeWhenFinished, identifier: "downloads.removeWhenFinished")
             SettingsDivider()
+            SettingToggle(title: "Download the top of To Read",
+                          description: "The first Books on To Read download by themselves, with all their Files, so what's next is ready offline.",
+                          isOn: Binding(get: { downloads.toReadCount > 0 },
+                                        set: { downloads.toReadCount = $0 ? ToReadCountStepper.defaultCount : 0 }),
+                          identifier: "downloads.toRead")
+            if downloads.toReadCount > 0 {
+                ToReadCountStepper(count: $downloads.toReadCount)
+            }
+            SettingsDivider()
             SettingToggle(title: "Download all covers on Wi-Fi",
                           description: "Every cover in your Libraries shows offline. Otherwise covers download as you browse.",
                           isOn: $model.prefetchesCovers, identifier: "downloads.prefetchCovers")
         }
+    }
+}
+
+/// How many Books from the top of To Read download, under the setting that
+/// turns it on.
+private struct ToReadCountStepper: View {
+    static let defaultCount = 3
+    @Binding var count: Int
+
+    var body: some View {
+        Stepper(value: $count, in: DownloadSettings.toReadCountRange) {
+            Group {
+                if count == 1 { Text("1 Book") } else { Text("\(count) Books") }
+            }
+            .font(.geist(.subheadline))
+            .foregroundStyle(Theme.foreground)
+            .monospacedDigit()
+        }
+        .frame(minHeight: 44)
+        .padding(.top, 6)
+        .accessibilityLabel(Text("Books to download from To Read"))
+        .accessibilityValue(Text("\(count)"))
+        .accessibilityIdentifier("downloads.toReadCount")
     }
 }
 

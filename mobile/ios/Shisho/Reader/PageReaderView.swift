@@ -80,7 +80,7 @@ struct PageReaderView: View {
     }
 
     private var status: some View {
-        ReaderStatus(phase: model.phase, foreground: Self.pageForeground) { Task { await model.load() } }
+        ReaderStatus(phase: model.phase, download: model.download, foreground: Self.pageForeground) { model.reload() }
     }
 
     // MARK: - Controls
@@ -355,7 +355,7 @@ private struct PageReaderSettingsSheet: View {
 
     private var flowHint: LocalizedStringResource {
         guard model.flowChosen else { return "Picked from the page shapes until you choose." }
-        return model.flowSyncs ? "Saved for this book." : "Saved for this book on this device."
+        return "Saved for this book."
     }
 
     var body: some View {

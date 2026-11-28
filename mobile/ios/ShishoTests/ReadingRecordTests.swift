@@ -86,6 +86,14 @@ final class ReadingRecordTests: XCTestCase {
         XCTAssertEqual(try store.pool.read { try CatalogStore.journalNotes($0) }.count, 1)
     }
 
+    func testTheTopOfToReadDownloadsInItsOrderWithItsFiles() throws {
+        for id in [1, 2] { try store.record(.addToRead(book: id), at: now) }
+        try store.record(.moveToRead(book: 2, after: nil), at: now)
+        let entries = try store.pool.read { try CatalogStore.toReadDownloadables($0) }
+        XCTAssertEqual(entries.map(\.bookID), [2, 1])
+        XCTAssertEqual(entries.map(\.files), [1, 1], "each Book's audiobook can be downloaded")
+    }
+
     func testToReadOrderFollowsMovesMadeOffline() throws {
         for id in [1, 2, 3] { try store.record(.addToRead(book: id), at: now) }
         try store.record(.moveToRead(book: 3, after: nil), at: now)

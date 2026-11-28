@@ -51,12 +51,47 @@ struct ResourceListView: View {
     @State private var items: [ResourceSummary]?
     @State private var filter = ""
     @Environment(\.appTab) private var tab
+    /// The Library's tag namespaces, whose tabs a Tags list shows.
+    @State private var namespaces: [String]?
+    @State private var chosenScope: TagScope = .plain
 
-    private var shown: [ResourceSummary] {
+    /// The tab showing: the plain tags, unless a namespace is chosen that
+    /// the Library still lists. Only Tags with namespaces have tabs.
+    private var scope: TagScope {
+        guard kind == .tag, let namespaces, !namespaces.isEmpty else { return .all }
+        if case .namespace(let chosen) = chosenScope, !namespaces.contains(chosen) { return .plain }
+        return chosenScope
+    }
+
+    private var matching: [ResourceSummary] {
         let all = items ?? []
         let text = filter.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return all }
-        return all.filter { $0.name.localizedStandardContains(text) || $0.detail.localizedStandardContains(text) }
+        return all.filter {
+            $0.name.localizedStandardContains(text) || $0.shownName.localizedStandardContains(text) || $0.detail.localizedStandardContains(text)
+        }
+    }
+
+    private var shown: [ResourceSummary] {
+        let inScope = matching.filter { scope.contains(namespace: $0.namespace) }
+        // A namespace's tags sort by their names without the prefix.
+        guard case .namespace = scope else { return inScope }
+        return inScope.sorted { $0.shownName.localizedStandardCompare($1.shownName) == .orderedAscending }
+    }
+
+    /// As the web's: a namespace's tab searches it by name.
+    private var searchPrompt: Text {
+        if case .namespace(let name) = scope { return Text("Search \(name)") }
+        return Text("Search \(kind.title.lowercased())")
+    }
+
+    private var scopeTabs: [TagScopeTabs.Tab] {
+        let matching = matching
+        return ([TagScope.plain] + (namespaces ?? []).map(TagScope.namespace)).map { scope in
+            let label = if case .namespace(let name) = scope { name } else { String(localized: "Tags") }
+            return TagScopeTabs.Tab(scope: scope, label: label,
+                                    count: matching.filter { scope.contains(namespace: $0.namespace) }.count)
+        }
     }
 
     /// The web app's line under each list's title.
@@ -78,6 +113,10 @@ struct ResourceListView: View {
                         .foregroundStyle(Theme.mutedForeground)
                         .padding(.horizontal, GridLayout.margin)
                         .padding(.bottom, 16)
+                    if scope != .all {
+                        TagScopeTabs(tabs: scopeTabs, scope: $chosenScope)
+                            .padding(.bottom, 12)
+                    }
                     if let items, items.isEmpty {
                         EmptyNotice(title: String(localized: "Nothing here yet"),
                                     message: String(localized: "\(kind.title) in your Libraries appear here."),
@@ -90,7 +129,8 @@ struct ResourceListView: View {
                                 // Through the model, which closes the filter's search
                                 // first (TabNavigation).
                                 Button { model.push(.resource(kind, id: item.id, name: item.name)) } label: {
-                                    ResourceRow(item: item, kind: kind)
+                                    // A namespace's tab doesn't repeat it on each row.
+                                    ResourceRow(item: item, kind: kind, showsNamespace: scope == .all)
                                 }
                                 .buttonStyle(PressableStyle())
                                 .accessibilityIdentifier("browse.item")
@@ -104,12 +144,16 @@ struct ResourceListView: View {
             .miniPlayerClearance()
         }
         .background(Theme.background)
-        .searchable(text: $filter, isPresented: model.searchActive(on: tab), prompt: Text("Search \(kind.title.lowercased())"))
+        .searchable(text: $filter, isPresented: model.searchActive(on: tab), prompt: searchPrompt)
         .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.syncNow() }
         .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(kind)-\(model.libraryID)", into: $items) { [kind, libraryID = model.libraryID == 0 ? nil : model.libraryID] db in
             try CatalogStore.resources(db, kind: kind, libraryID: libraryID)
+        }
+        .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-namespaces-\(model.libraryID)", into: $namespaces) {
+            [kind, libraryID = model.libraryID == 0 ? nil : model.libraryID] db in
+            kind == .tag ? try CatalogStore.tagNamespaces(db, libraryID: libraryID) : []
         }
     }
 
@@ -146,7 +190,8 @@ struct ResourceView: View {
     @State private var numbers: SeriesNumberMap?
     @State private var downloadable: DownloadAllButton.Files?
 
-    private var name: String { (detail ?? nil)?.name ?? initialName }
+    /// A namespaced Tag's name without its prefix, which its header names.
+    private var name: String { (detail ?? nil)?.shownName ?? initialName }
 
     var body: some View {
         GeometryReader { geometry in
@@ -211,6 +256,14 @@ struct ResourceView: View {
     private var header: some View {
         if let detail = detail ?? nil {
             VStack(alignment: .leading, spacing: 10) {
+                // A namespaced Tag's namespace, over it as the web shows it.
+                if let namespace = detail.namespace {
+                    Text(namespace)
+                        .font(.geist(.footnote, weight: .semibold))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .accessibilityLabel(String(localized: "Namespace: \(namespace)"))
+                        .accessibilityIdentifier("resource.namespace")
+                }
                 // Its counts, as the web app badges them under the name.
                 HStack(spacing: 6) {
                     ForEach(counts, id: \.self) { CountBadge(text: $0) }
@@ -286,5 +339,61 @@ struct ShowMoreButton: View {
         .font(.geist(.subheadline, weight: .semibold))
         .foregroundStyle(Theme.primary)
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Tabs over a list of tags in a Library with tag namespaces, as the web
+/// shows them: the plain tags, each namespace, and in a picker, every tag.
+/// Counts follow the search.
+struct TagScopeTabs: View {
+    struct Tab: Identifiable {
+        let scope: TagScope
+        let label: String
+        var count: Int?
+        var id: TagScope { scope }
+    }
+
+    let tabs: [Tab]
+    @Binding var scope: TagScope
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(tabs) { tab in
+                    let on = tab.scope == scope
+                    Button { scope = tab.scope } label: {
+                        HStack(spacing: 6) {
+                            Text(verbatim: tab.label)
+                                .font(.geist(.subheadline, weight: .medium))
+                            if let count = tab.count {
+                                Text(verbatim: "\(count)")
+                                    .font(.geist(.caption))
+                                    .monospacedDigit()
+                                    .opacity(0.7)
+                            }
+                        }
+                        .foregroundStyle(on ? Theme.primaryForeground : Theme.foreground)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 36)
+                        .background(on ? Theme.primary : Theme.secondary, in: Capsule())
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(tab.count.map { String(localized: "\(tab.label), \(Counts.tags($0))") } ?? tab.label)
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                    .accessibilityIdentifier(TagScopeTabs.identifier(tab.scope))
+                }
+            }
+            .padding(.horizontal, GridLayout.margin)
+        }
+    }
+
+    static func identifier(_ scope: TagScope) -> String {
+        switch scope {
+        case .all: "tags.scope.all"
+        case .plain: "tags.scope.plain"
+        case .namespace(let namespace): "tags.scope.\(namespace)"
+        }
     }
 }

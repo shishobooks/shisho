@@ -9,9 +9,9 @@ import (
 	"github.com/shishobooks/shisho/pkg/reading"
 )
 
-// Reading Stats' Calendar (CapabilityReadingCalendar): the same heatmap,
-// month, and day the web's Calendar tab shows, with each Book named by its
-// id for the app to find in its own catalog.
+// Reading Stats' Calendar: the same heatmap, month, and day the web's
+// Calendar tab shows, with each Book named by its id for the app to find in
+// its own catalog.
 
 // statsHeatmap sends the user's reading for a year, or the last 12 months,
 // a day at a time.

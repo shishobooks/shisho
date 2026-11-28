@@ -20,6 +20,31 @@ struct Bookmark: Equatable, Identifiable, Hashable, Sendable {
 }
 
 extension CatalogStore {
+    // MARK: - Schema
+
+    /// Bookmarks, from the feed and made on the device. A Bookmark's
+    /// journal events name it, so deleting one not yet sent drops them, and
+    /// a note edited here shows until its edit is sent.
+    static func createBookmarks(_ db: Database) throws {
+        try db.create(table: "bookmarks") { t in
+            // The id this installation made it under, or "server-<id>"
+            // for one made elsewhere.
+            t.primaryKey("id", .text)
+            t.column("server_id", .integer).unique()
+            t.column("local_id", .text)
+            t.column("file_id", .integer).notNull().indexed()
+            t.column("seconds", .double).notNull()
+            // The server's note, and one edited here, shown while its
+            // edit waits in the journal.
+            t.column("note", .text)
+            t.column("local_note", .text)
+            t.column("created_at", .double).notNull()
+            // Deleted here, until the server's delete arrives.
+            t.column("deleted", .boolean).notNull().defaults(to: false)
+            t.column("generation", .integer).notNull()
+        }
+    }
+
     // MARK: - Reading
 
     /// A Bookmark's columns as shown: its note is the one edited here while

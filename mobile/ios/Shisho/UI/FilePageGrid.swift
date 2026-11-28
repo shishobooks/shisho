@@ -30,7 +30,7 @@ struct FilePageGrid: View {
         if let row = download, row.state == .done || row.replacing {
             return .downloaded(copy: "\(row.state)-\(row.replacing)-\(row.sizeBytes)")
         }
-        guard model.connection == .online, model.session?.sendsPageImages == true else { return .none }
+        guard model.connection == .online, model.session != nil else { return .none }
         return .server
     }
 

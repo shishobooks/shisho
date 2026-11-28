@@ -14,15 +14,13 @@ struct PlayerToolbar: View {
             Spacer(minLength: 4)
             sleepMenu
             Spacer(minLength: 4)
-            if player.bookmarksAvailable {
-                Button(action: addBookmark) {
-                    ToolLabel(icon: .bookmarkPlus, caption: Text("Bookmark"))
-                }
-                .accessibilityLabel("Add Bookmark")
-                .accessibilityHint("Bookmarks where playback is")
-                .accessibilityIdentifier("player.bookmark")
-                Spacer(minLength: 4)
+            Button(action: addBookmark) {
+                ToolLabel(icon: .bookmarkPlus, caption: Text("Bookmark"))
             }
+            .accessibilityLabel("Add Bookmark")
+            .accessibilityHint("Bookmarks where playback is")
+            .accessibilityIdentifier("player.bookmark")
+            Spacer(minLength: 4)
             Button(action: showChapters) {
                 ToolLabel(icon: .listMusic, caption: Text("Chapters"))
             }
@@ -151,13 +149,11 @@ struct PlayerMenu: View {
 
     var body: some View {
         Menu {
-            if player.bookmarksAvailable {
-                Button(action: showBookmarks) {
-                    Label("Bookmarks", menuIcon: .bookmark)
-                }
-                .accessibilityIdentifier("player.bookmarks")
-                Divider()
+            Button(action: showBookmarks) {
+                Label("Bookmarks", menuIcon: .bookmark)
             }
+            .accessibilityIdentifier("player.bookmarks")
+            Divider()
             Picker(selection: Binding(get: { player.backInterval }, set: { player.setBackInterval($0) })) {
                 ForEach(PlayerSettings.skipLengths, id: \.self) { seconds in
                     Text("\(Int(seconds)) Seconds").tag(seconds)
@@ -306,22 +302,14 @@ struct PlayerListSheet: View {
         .presentationDragIndicator(.visible)
     }
 
-    /// The title, or a switch between the tabs when the server keeps
-    /// Bookmarks, with Done.
+    /// A switch between the tabs, with Done.
     private var header: some View {
         ZStack {
-            if player.bookmarksAvailable {
-                SegmentedChoice(
-                    options: [(Tab.chapters, String(localized: "Chapters"), "list.chapters"),
-                              (Tab.bookmarks, String(localized: "Bookmarks"), "list.bookmarks")],
-                    selection: $tab
-                )
-            } else {
-                Text("Chapters")
-                    .font(.geist(.subheadline, weight: .semibold))
-                    .foregroundStyle(Theme.foreground)
-                    .accessibilityAddTraits(.isHeader)
-            }
+            SegmentedChoice(
+                options: [(Tab.chapters, String(localized: "Chapters"), "list.chapters"),
+                          (Tab.bookmarks, String(localized: "Bookmarks"), "list.bookmarks")],
+                selection: $tab
+            )
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }
@@ -340,7 +328,8 @@ struct PlayerListSheet: View {
     // MARK: - Chapters
 
     private var chapters: some View {
-        VStack(spacing: 0) {
+        // Lazy, as a book can have hundreds of chapters.
+        LazyVStack(spacing: 0) {
             if let file = player.file {
                 ForEach(Array(file.chapters.enumerated()), id: \.offset) { index, chapter in
                     if index > 0 {

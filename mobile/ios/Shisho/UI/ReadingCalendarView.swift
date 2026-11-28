@@ -5,10 +5,10 @@ import SwiftUI
 /// 12 months or a year picked beside it, a month calendar that goes back to
 /// the first month with any reading, and the day picked under it. Each part
 /// shows the copy last fetched, fetched again whenever the server can be
-/// reached, so the tab works offline once seen (CapabilityReadingCalendar),
-/// with this device's reading not synced yet laid over it as the Overview
-/// lays it (CalendarLayering). A part never fetched shows that reading
-/// alone. It sits in the Reading Stats page's scroll view.
+/// reached, so the tab works offline once seen, with this device's reading
+/// not synced yet laid over it as the Overview lays it (CalendarLayering). A
+/// part never fetched shows that reading alone. It sits in the Reading Stats
+/// page's scroll view.
 struct ReadingCalendarView: View {
     @Environment(AppModel.self) private var model
     /// The heatmap's year, or nil for the last 12 months.
@@ -116,7 +116,7 @@ struct ReadingCalendarView: View {
     }
 
     private func fetch(_ key: CalendarCacheKey) async {
-        guard let session = model.session, model.connection == .online, model.offers(.readingCalendar) else {
+        guard let session = model.session, model.connection == .online else {
             tried.insert(key)
             return
         }

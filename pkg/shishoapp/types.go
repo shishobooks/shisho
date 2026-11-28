@@ -34,46 +34,6 @@ type ServerInfo struct {
 	InstanceID string `json:"instance_id"`
 }
 
-// The capabilities a server can list (ServerInfo.Capabilities, and the
-// X-Shisho-Capabilities header). An app turns a feature on for a server only
-// when it lists the feature's capability.
-const (
-	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles | typeof CapabilityPageFlow | typeof CapabilityPageImages | typeof CapabilityReadingStatus | typeof CapabilityRatings | typeof CapabilityToRead | typeof CapabilityLists | typeof CapabilityClearPosition | typeof CapabilityReadingStats | typeof CapabilityReadingCalendar;
-	// CapabilityBookmarks is the Bookmark events in the journal and
-	// Bookmarks in the feed.
-	CapabilityBookmarks = "bookmarks"
-	// CapabilityShareFiles is the route that sends a File's Generated File
-	// for the app to share out of itself (ADR 0022).
-	CapabilityShareFiles = "share_files"
-	// CapabilityPageFlow is the Page flow event in the journal, which saves
-	// the flow the app chose for a Book.
-	CapabilityPageFlow = "page_flow"
-	// CapabilityPageImages is the route that sends a CBZ's or PDF's pages
-	// as thumbnails, for the app's page grid before the File is downloaded.
-	CapabilityPageImages = "page_images"
-	// CapabilityReadingStatus is the Read-through and Reference events in
-	// the journal: start, finish, abandon, pause, resume, delete, and
-	// marking or removing Reference.
-	CapabilityReadingStatus = "reading_status"
-	// CapabilityRatings is the Rating events in the journal.
-	CapabilityRatings = "ratings"
-	// CapabilityToRead is the To Read events in the journal: add, remove,
-	// and move.
-	CapabilityToRead = "to_read"
-	// CapabilityLists is the List events in the journal: create, rename,
-	// and delete a List, and add, remove, and move its Books.
-	CapabilityLists = "lists"
-	// CapabilityClearPosition is the event that clears the user's saved
-	// place in a File.
-	CapabilityClearPosition = "clear_position"
-	// CapabilityReadingStats is the route that sends the user's Reading
-	// Stats, which the app keeps a copy of to show offline.
-	CapabilityReadingStats = "reading_stats"
-	// CapabilityReadingCalendar is the routes that send Reading Stats'
-	// Calendar: the heatmap, a month's calendar, and a day's Sessions.
-	CapabilityReadingCalendar = "reading_calendar"
-)
-
 // SignInPayload signs an installation in with the user's username and
 // password, which creates a Shisho app Device for it.
 type SignInPayload struct {
@@ -220,6 +180,9 @@ type FeedLibrary struct {
 	// for the default, newest first. A field the app doesn't know is
 	// skipped.
 	SortSpec string `json:"sort_spec"`
+	// TagNamespaces are the tag name prefixes the Library groups tags by, in
+	// its order, as the web shows them (models.Library.TagNamespaces).
+	TagNamespaces []string `json:"tag_namespaces"`
 }
 
 // FeedBook is a Book as the app keeps it.
@@ -229,6 +192,10 @@ type FeedBook struct {
 	Title     string  `json:"title"`
 	Subtitle  *string `json:"subtitle"`
 	SortTitle string  `json:"sort_title"`
+	// Filepath is where the server keeps the Book: its folder, or its one
+	// File for a Book at a Library's root. The app searches it, as the
+	// web's search does.
+	Filepath string `json:"filepath"`
 	// Description is the Book's, as plain text or HTML, as the web app
 	// shows it.
 	Description *string `json:"description"`
@@ -549,17 +516,14 @@ const (
 	//tygo:emit export type JournalEventType = typeof JournalEventReadingPosition | typeof JournalEventReadingSession | typeof JournalEventBookmarkCreate | typeof JournalEventBookmarkNote | typeof JournalEventBookmarkDelete | typeof JournalEventPageFlow | typeof JournalEventReadThroughStart | typeof JournalEventReadThroughFinish | typeof JournalEventReadThroughAbandon | typeof JournalEventReadThroughPause | typeof JournalEventReadThroughResume | typeof JournalEventReadThroughDelete | typeof JournalEventReferenceMark | typeof JournalEventReferenceRemove | typeof JournalEventRatingSet | typeof JournalEventRatingClear | typeof JournalEventToReadAdd | typeof JournalEventToReadRemove | typeof JournalEventToReadMove | typeof JournalEventListCreate | typeof JournalEventListRename | typeof JournalEventListDelete | typeof JournalEventListAdd | typeof JournalEventListRemove | typeof JournalEventListMove | typeof JournalEventPositionClear;
 	JournalEventReadingPosition = "reading_position"
 	JournalEventReadingSession  = "reading_session"
-	// The Bookmark events, sent only to a server that lists
-	// CapabilityBookmarks.
+	// The Bookmark events.
 	JournalEventBookmarkCreate = "bookmark_create"
 	JournalEventBookmarkNote   = "bookmark_note"
 	JournalEventBookmarkDelete = "bookmark_delete"
-	// The Page flow event, sent only to a server that lists
-	// CapabilityPageFlow.
+	// The Page flow event.
 	JournalEventPageFlow = "page_flow"
-	// The Read-through and Reference events, sent only to a server that
-	// lists CapabilityReadingStatus. Each does what the web's status menu
-	// does, at the event's time (ADR 0028 orders them).
+	// The Read-through and Reference events. Each does what the web's
+	// status menu does, at the event's time (ADR 0028 orders them).
 	JournalEventReadThroughStart   = "read_through_start"
 	JournalEventReadThroughFinish  = "read_through_finish"
 	JournalEventReadThroughAbandon = "read_through_abandon"
@@ -568,22 +532,21 @@ const (
 	JournalEventReadThroughDelete  = "read_through_delete"
 	JournalEventReferenceMark      = "reference_mark"
 	JournalEventReferenceRemove    = "reference_remove"
-	// The Rating events, sent only to a server that lists CapabilityRatings.
+	// The Rating events.
 	JournalEventRatingSet   = "rating_set"
 	JournalEventRatingClear = "rating_clear"
-	// The To Read events, sent only to a server that lists CapabilityToRead.
+	// The To Read events.
 	JournalEventToReadAdd    = "to_read_add"
 	JournalEventToReadRemove = "to_read_remove"
 	JournalEventToReadMove   = "to_read_move"
-	// The List events, sent only to a server that lists CapabilityLists.
+	// The List events.
 	JournalEventListCreate = "list_create"
 	JournalEventListRename = "list_rename"
 	JournalEventListDelete = "list_delete"
 	JournalEventListAdd    = "list_add"
 	JournalEventListRemove = "list_remove"
 	JournalEventListMove   = "list_move"
-	// The event that clears a File's saved place, sent only to a server
-	// that lists CapabilityClearPosition.
+	// The event that clears a File's saved place.
 	JournalEventPositionClear = "position_clear"
 )
 
@@ -863,7 +826,7 @@ type StatsHeatmapQuery struct {
 // StatsHeatmapResponse is the user's reading a day at a time, for the
 // heatmap on Reading Stats' Calendar tab, as the web's. Days are in the
 // user's time zone, a Session past midnight split between both. The app
-// keeps a copy of each it shows (CapabilityReadingCalendar).
+// keeps a copy of each it shows.
 type StatsHeatmapResponse struct {
 	// Today is the user's today.
 	Today string `json:"today"`

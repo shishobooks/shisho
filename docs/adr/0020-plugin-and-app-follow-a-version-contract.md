@@ -21,6 +21,7 @@ The rules both follow:
 
 - **The Shisho app has two surfaces.** Its Device surface covers everything it needs to work at all, and everything it does offline: sign-in, server info, the catalog change feed (ADR 0023), the journal (ADR 0024), downloads and streaming, and covers. That surface is versioned like the plugin's. Its online-only screens (admin, metadata editing, Identify) call the same `/api` as the web app, each behind a versioned capability. When a route behind a listed capability changes incompatibly, the server lists the next version instead, and an older app hides that screen. A test pins the request and response types of every route behind a listed capability. Every other `/api` route stays internal to the web app, as before.
 - **The minimum server for the app's first release** is the first Shisho release with the Device surface, which is app protocol 1.
+- **The capabilities added before that release were folded into protocol 1's baseline**, since no released app or server had them, so protocol 1 starts with none listed.
 - **An app protocol stays accepted for at least 12 months** after a newer one supersedes it, and the release notes announce when one is dropped. The plugin has few users and fixes forward, so this floor is the app's.
 - **A server too old for the app, or an app too old for its server, leaves the account working offline.** Downloads still play and changes keep queuing until the gap closes.
 - **The app doesn't connect to a server in Demo Mode**, which refuses every write, including the sign-in that creates a Device.

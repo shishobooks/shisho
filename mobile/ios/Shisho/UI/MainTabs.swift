@@ -570,6 +570,11 @@ struct PreviewStack: View {
 struct ResourceRow: View {
     let item: ResourceSummary
     let kind: ResourceKind
+    /// A namespaced Tag says its namespace over its name, except where a
+    /// list already shows only that namespace's.
+    var showsNamespace = true
+
+    private var namespace: String? { showsNamespace ? item.namespace : nil }
 
     private var badges: [String] {
         guard kind == .person else { return [Counts.books(item.bookCount)] }
@@ -587,7 +592,13 @@ struct ResourceRow: View {
         HStack(spacing: 12) {
             PreviewStack(books: item.previews)
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
+                if let namespace {
+                    Text(namespace)
+                        .font(.geist(.caption2, weight: .semibold))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .lineLimit(1)
+                }
+                Text(item.shownName)
                     .font(.geist(.headline, weight: .semibold))
                     .foregroundStyle(Theme.foreground)
                     .lineLimit(2)
@@ -607,7 +618,7 @@ struct ResourceRow: View {
         .cardStyle(radius: Theme.radius + 2)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(([item.name] + badges).joined(separator: ", "))
+        .accessibilityLabel(([namespace, item.shownName].compactMap { $0 } + badges).joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
     }
 }

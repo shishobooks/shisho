@@ -86,6 +86,40 @@ const contentStart = target => {
     return target
 }
 
+// Shisho patch: a forced break before a section's first content, as a
+// chapter's file gives its first element with `page-break-before: always`,
+// makes WebKit start the section on its second column, so the section's
+// first page is blank: paging on from the chapter before lands on it. A
+// section always starts on a page of its own, so those breaks are cleared,
+// down through the elements that lead it, until the first content: text or
+// a replaced element. An element that isn't drawn (display: none) is
+// passed over. Later breaks stay.
+const BREAKS_BEFORE = ['break-before', 'page-break-before', '-webkit-column-break-before']
+export const clearLeadingBreaks = doc => {
+    // The computed style where there is one, as in the reader's frames, so
+    // a stylesheet's display wins over an inline one as it does on screen.
+    const hidden = el => {
+        const style = doc.defaultView?.getComputedStyle(el)
+        return style ? style.display === 'none' : el.hidden || el.style.display === 'none'
+    }
+    // Clears breaks down through parent's leading elements, and whether it
+    // reached drawn content, which ends the walk. A subtree with nothing
+    // drawn, such as a wrapper of hidden text, is walked past.
+    const clear = parent => {
+        for (const node of parent.childNodes) {
+            if (node.nodeType === 3) {
+                if (node.textContent.trim() !== '') return true
+                continue
+            }
+            if (node.nodeType !== 1 || hidden(node)) continue
+            for (const name of BREAKS_BEFORE) node.style.setProperty(name, 'auto', 'important')
+            if (node.matches(REPLACED) || clear(node)) return true
+        }
+        return false
+    }
+    clear(doc.body)
+}
+
 const makeRange = (doc, node, start, end = start) => {
     const range = doc.createRange()
     range.setStart(node, start)
@@ -376,6 +410,8 @@ class View {
             'max-width': 'none',
             'margin': '0',
         })
+        // Shisho patch: see clearLeadingBreaks.
+        clearLeadingBreaks(doc)
         this.setImageSize()
         this.expand()
     }

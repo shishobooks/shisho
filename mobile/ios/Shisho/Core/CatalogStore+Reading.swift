@@ -78,6 +78,31 @@ struct ReadProgress: Equatable, Sendable {
 }
 
 extension CatalogStore {
+    /// What the reader keeps for a File's Book page, and the Page flow the
+    /// user chose for a Book here.
+    static func createReaderState(_ db: Database) throws {
+        // The chapter and pages left the reader last showed in a File, for
+        // its Book's page, which can't work them out without the book.
+        try db.create(table: "reader_places") { t in
+            t.primaryKey("file_id", .integer)
+            t.column("chapter", .text)
+            t.column("pages_left", .integer)
+            t.column("percentage", .double).notNull()
+        }
+        // The Page flow the user chose for a Book comes with their record
+        // of it, and one chosen here shows until the feed brings it back.
+        try db.create(table: "chosen_page_flows") { t in
+            t.primaryKey("book_id", .integer)
+            t.column("page_flow", .text).notNull()
+            // The journal event sending it.
+            t.column("event_id", .text)
+            // The server took it in: it goes once the feed brings the
+            // Book's record back, so the choice never flickers back to
+            // the old one in between.
+            t.column("accepted", .boolean).notNull().defaults(to: false)
+        }
+    }
+
     /// The File Types the reader lays out with foliate (ADR 0026).
     static let reflowableTypes: Set<String> = ["epub", "kepub", "mobi", "azw3"]
     /// The File Types the reader shows in the image pager (ADR 0025).
@@ -224,10 +249,11 @@ extension CatalogStore {
     /// Writes without waiting, on the writer's queue, so it lands before
     /// any write made after it. A failure goes to Diagnostics, as nothing
     /// waits to hear it.
-    private func writeQueued(_ failure: String, _ updates: @escaping @Sendable (Database) throws -> Void) {
+    func writeQueued(_ failure: String, category: Diagnostics.Category = .reader,
+                     _ updates: @escaping @Sendable (Database) throws -> Void) {
         pool.asyncWrite(updates) { _, result in
             guard case .failure(let error) = result else { return }
-            Task { await Diagnostics.shared.log(.reader, "\(failure): \(Diagnostics.describe(error))") }
+            Task { await Diagnostics.shared.log(category, "\(failure): \(Diagnostics.describe(error))") }
         }
     }
 
@@ -272,23 +298,18 @@ extension CatalogStore {
             """, arguments: [bookID, bookID]).flatMap(PageFlow.init(rawValue:))
     }
 
-    /// Saves the Page flow the user chose for bookID. With sync, the server
-    /// supports Page flow events (CapabilityPageFlow): it's queued for the
+    /// Saves the Page flow the user chose for bookID: it's queued for the
     /// server, which keeps it for the Book on the web too, and shows here
     /// until the feed brings the Book's record back after the server took it
-    /// in. Without, it's kept on this device alone. A later choice replaces
-    /// one not yet sent.
-    func choosePageFlow(_ flow: PageFlow, bookID: Int, at: Date, sync: Bool) throws {
+    /// in. A later choice replaces one not yet sent.
+    func choosePageFlow(_ flow: PageFlow, bookID: Int, at: Date) throws {
         let payload = Shishoapp.JournalPageFlowPayload(bookId: bookID, pageFlow: Models.PageFlow(rawValue: flow.rawValue))
         let data = try JSONEncoder().encode(payload)
         let key = "page_flow:\(bookID)"
         try pool.write { db in
             try db.execute(sql: "DELETE FROM journal WHERE coalesce_key = ? AND held_for IS NULL", arguments: [key])
-            var eventID: String?
-            if sync {
-                try CatalogStore.append(db, type: .pageFlow, at: at, payload: data, fileID: nil, coalesceKey: key)
-                eventID = try String.fetchOne(db, sql: "SELECT event_id FROM journal WHERE seq = last_insert_rowid()")
-            }
+            try CatalogStore.append(db, type: .pageFlow, at: at, payload: data, fileID: nil, coalesceKey: key)
+            let eventID = try String.fetchOne(db, sql: "SELECT event_id FROM journal WHERE seq = last_insert_rowid()")
             try db.execute(sql: """
                 INSERT INTO chosen_page_flows (book_id, page_flow, event_id, accepted) VALUES (?, ?, ?, FALSE)
                 ON CONFLICT (book_id) DO UPDATE SET page_flow = excluded.page_flow, event_id = excluded.event_id, accepted = FALSE

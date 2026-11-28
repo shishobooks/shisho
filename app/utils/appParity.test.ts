@@ -152,11 +152,11 @@ describe("the Shisho app's chart colors", () => {
   it("draw reading and listening in the same steps as the web", () => {
     // Each side's own mapping, so neither can repoint a series alone.
     const light = between(css, ":root {", "}");
-    expect(light).toMatch(/--reading:\s*var\(--chart-purple-1\)/);
-    expect(light).toMatch(/--listening:\s*var\(--chart-purple-2\)/);
+    expect(light).toMatch(/--reading:\s*var\(--chart-series-1\)/);
+    expect(light).toMatch(/--listening:\s*var\(--chart-series-2\)/);
     expect(between(css, ".dark {", "}")).not.toMatch(/--(reading|listening):/);
-    expect(appStats).toMatch(/static let reading = Color\("ChartPurple1"\)/);
-    expect(appStats).toMatch(/static let listening = Color\("ChartPurple2"\)/);
+    expect(appStats).toMatch(/static let reading = Color\("ChartSeries1"\)/);
+    expect(appStats).toMatch(/static let listening = Color\("ChartSeries2"\)/);
   });
 
   it("give the calendar's Books the web's colors, in its order", () => {
@@ -176,9 +176,9 @@ describe("the Shisho app's chart colors", () => {
   const light = between(css, ":root {", "}");
   const dark = between(css, ".dark {", "}");
 
-  it.each([1, 2, 3])("match the web's --chart-purple-%i", (step) => {
-    const name = `chart-purple-${step}`;
-    const asset = `ChartPurple${step}`;
+  it.each([1, 2, 3])("match the web's --chart-series-%i", (step) => {
+    const name = `chart-series-${step}`;
+    const asset = `ChartSeries${step}`;
     // A channel off by one is rounding, not drift.
     for (const [want, got] of [
       [cssColor(light, name), assetColor(asset, false)],

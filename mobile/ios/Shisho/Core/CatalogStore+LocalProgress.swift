@@ -11,8 +11,6 @@ extension CatalogStore {
             t.column("percentage", .double).notNull()
         }
         try db.execute(sql: """
-            INSERT INTO local_progress (file_id, percentage) SELECT file_id, ROUND(percentage, 2) FROM local_positions;
-
             -- Each trigger deletes, then inserts: an OR REPLACE in a trigger
             -- yields to the conflict clause of the statement that fired it.
 

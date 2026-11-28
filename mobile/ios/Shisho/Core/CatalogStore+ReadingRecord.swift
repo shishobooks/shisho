@@ -29,31 +29,73 @@ enum ReadingChange: Equatable, Sendable {
     case removeFromList(id: Int, book: Int)
     case moveInList(id: Int, book: Int, after: Int?)
     case clearPosition(file: Int)
-
-    /// The capability a server lists for it (ADR 0024).
-    var capability: Shishoapp.Capability {
-        switch self {
-        case .start, .finish, .abandon, .pause, .resume, .notStarted, .deleteReadThrough, .markReference, .removeReference:
-            .readingStatus
-        case .rating: .ratings
-        case .addToRead, .removeFromToRead, .moveToRead: .toRead
-        case .createList, .renameList, .deleteList, .addToList, .removeFromList, .moveInList: .lists
-        case .clearPosition: .clearPosition
-        }
-    }
 }
 
 extension CatalogStore {
     // MARK: - Schema
 
-    /// The user's reading record as the feed sends it, kept apart from what
-    /// screens read: user_books, read_throughs, lists, and list_books hold it
-    /// with the changes the server hasn't confirmed laid over it, rebuilt
+    /// The user's reading record: each Book's record, Read-throughs, and
+    /// Lists. The feed's copy is kept in the synced_ tables, apart from what
+    /// screens read: user_books, read_throughs, lists, and list_books hold
+    /// it with the changes the server hasn't confirmed laid over it, rebuilt
     /// whenever either changes. Accepted changes wait in journal_applied
     /// until the feed brings them back, so nothing flickers in between, and
     /// Reading Stats keeps a copy of each range it showed, with what it was
     /// fetched after.
-    static func migrateReadingRecord(_ db: Database) throws {
+    static func createReadingRecord(_ db: Database) throws {
+        try db.create(table: "user_books") { t in
+            t.primaryKey("book_id", .integer)
+            t.column("rating", .integer)
+            t.column("to_read_position", .integer)
+            t.column("reference", .boolean).notNull()
+            t.column("page_flow", .text)
+            t.column("generation", .integer).notNull()
+        }
+        try db.create(table: "read_throughs") { t in
+            t.primaryKey("id", .integer)
+            t.column("book_id", .integer).indexed()
+            t.column("begin_day", .text)
+            t.column("end_day", .text)
+            t.column("outcome", .text).notNull()
+            t.column("paused", .boolean).notNull()
+            // When the Read-through was last read, as the server's Last read
+            // sort counts it, for the same sort here.
+            t.column("last_read_at", .double)
+            // The Book's title and authors, kept for Reading History once
+            // the Book is deleted.
+            t.column("book_title", .text)
+            t.column("book_authors", .text)
+            // A change the server hasn't confirmed made or changed it, or
+            // ended it (ReadingLayer).
+            t.column("pending", .boolean).notNull().defaults(to: false)
+            t.column("ended_here", .boolean).notNull().defaults(to: false)
+            t.column("generation", .integer).notNull()
+        }
+        try db.create(table: "lists") { t in
+            t.primaryKey("id", .integer)
+            // The id this installation made it under, for one made here.
+            t.column("local_id", .text)
+            t.column("name", .text).notNull()
+            t.column("description", .text)
+            t.column("is_ordered", .boolean).notNull()
+            t.column("default_sort", .text).notNull()
+            t.column("owner_id", .integer).notNull()
+            t.column("owner_name", .text).notNull()
+            t.column("permission", .text).notNull()
+            // JSON: [{"user_id","username","permission"}], for its owner and
+            // managers.
+            t.column("shares", .text).notNull().defaults(to: "[]")
+            t.column("pending", .boolean).notNull().defaults(to: false)
+            t.column("generation", .integer).notNull()
+        }
+        try db.create(table: "list_books") { t in
+            t.column("list_id", .integer).notNull().references("lists", onDelete: .cascade)
+            t.column("position", .integer).notNull()
+            t.column("book_id", .integer).notNull().indexed()
+            t.column("sort_order", .integer)
+            t.column("added_at", .double).notNull()
+            t.primaryKey(["list_id", "position"])
+        }
         try db.create(table: "synced_user_books") { t in
             t.primaryKey("book_id", .integer)
             t.column("rating", .integer)
@@ -62,10 +104,6 @@ extension CatalogStore {
             t.column("page_flow", .text)
             t.column("generation", .integer).notNull()
         }
-        try db.execute(sql: """
-            INSERT INTO synced_user_books (book_id, rating, to_read_position, reference, page_flow, generation)
-            SELECT book_id, rating, to_read_position, reference, page_flow, generation FROM user_books
-            """)
         try db.create(table: "synced_read_throughs") { t in
             t.primaryKey("id", .integer)
             t.column("book_id", .integer).indexed()
@@ -78,10 +116,6 @@ extension CatalogStore {
             t.column("book_authors", .text)
             t.column("generation", .integer).notNull()
         }
-        try db.execute(sql: """
-            INSERT INTO synced_read_throughs (id, book_id, begin_day, end_day, outcome, paused, last_read_at, generation)
-            SELECT id, book_id, begin_day, end_day, outcome, paused, last_read_at, generation FROM read_throughs
-            """)
         try db.create(table: "synced_lists") { t in
             t.primaryKey("id", .integer)
             t.column("local_id", .text)
@@ -95,10 +129,6 @@ extension CatalogStore {
             t.column("shares", .text).notNull().defaults(to: "[]")
             t.column("generation", .integer).notNull()
         }
-        try db.execute(sql: """
-            INSERT INTO synced_lists (id, name, description, is_ordered, default_sort, owner_id, owner_name, permission, shares, generation)
-            SELECT id, name, description, is_ordered, default_sort, owner_id, owner_name, permission, shares, generation FROM lists
-            """)
         try db.create(table: "synced_list_books") { t in
             t.column("list_id", .integer).notNull().references("synced_lists", onDelete: .cascade)
             t.column("position", .integer).notNull()
@@ -106,25 +136,6 @@ extension CatalogStore {
             t.column("sort_order", .integer)
             t.column("added_at", .double).notNull()
             t.primaryKey(["list_id", "position"])
-        }
-        try db.execute(sql: """
-            INSERT INTO synced_list_books (list_id, position, book_id, sort_order, added_at)
-            SELECT list_id, position, book_id, sort_order, added_at FROM list_books
-            """)
-        try db.alter(table: "read_throughs") { t in
-            t.add(column: "book_title", .text)
-            t.add(column: "book_authors", .text)
-            t.add(column: "pending", .boolean).notNull().defaults(to: false)
-            t.add(column: "ended_here", .boolean).notNull().defaults(to: false)
-        }
-        try db.alter(table: "lists") { t in
-            t.add(column: "local_id", .text)
-            t.add(column: "pending", .boolean).notNull().defaults(to: false)
-        }
-        // The Book a journal event is about, so a Book's changes are found
-        // without reading every payload.
-        try db.alter(table: "journal") { t in
-            t.add(column: "book_id", .integer).indexed()
         }
         try db.create(table: "journal_applied") { t in
             t.primaryKey("seq", .integer)

@@ -73,7 +73,7 @@ struct FileView: View {
                     .opacity(scrolled ? 1 : 0)
                     .accessibilityHidden(!scrolled)
             }
-            if let file, model.offers(.clearPosition), file.progress != nil || (listen ?? nil).map({ $0.seconds > 1 }) == true {
+            if let file, file.progress != nil || (listen ?? nil).map({ $0.seconds > 1 }) == true {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button { clearing = file } label: {
@@ -223,10 +223,10 @@ struct FileView: View {
     // MARK: - Download and share
 
     /// Download, or where its Download stands, and Share, which sends the
-    /// File out with Shisho's current metadata when the server offers it.
+    /// File out with Shisho's current metadata.
     @ViewBuilder
     private func fileActions(_ file: BookDetail.File) -> some View {
-        let supported = FileTypes.isKnown(file.fileType)
+        let support = FileSupport(fileType: file.fileType)
         let downloads = model.session?.downloads
         let status = downloads?.status(download ?? nil) ?? .notDownloaded
         // Side by side, or one over the other at accessibility text sizes.
@@ -238,12 +238,11 @@ struct FileView: View {
                     switch status {
                     case .notDownloaded, .failed:
                         Button { downloads?.download([file.id]) } label: {
-                            Label(verbatim: supported ? String(localized: "Download") : String(localized: "Not supported"), icon: .download)
+                            Label(verbatim: support.downloadTitle, icon: .download)
                         }
-                        .disabled(!supported)
-                        .modifier(NeedsConnection(available: !supported || model.connection == .online))
-                        .accessibilityLabel(supported ? String(localized: "Download \(file.label)")
-                                            : String(localized: "Download \(file.label), not supported in this version of the app"))
+                        .disabled(!support.isSupported)
+                        .modifier(NeedsConnection(available: !support.needsConnection(online: model.connection == .online)))
+                        .accessibilityLabel(support.downloadLabel(file.label))
                     case .waiting, .running:
                         Button { downloads?.remove([file.id]) } label: {
                             Label("Stop Download", icon: .x)
@@ -261,7 +260,7 @@ struct FileView: View {
                 .buttonStyle(OutlineButtonStyle(role: status == .downloaded ? .destructive : nil))
                 .accessibilityValue(DownloadWords.status(status) ?? "")
                 .accessibilityIdentifier("file.download")
-                if supported, model.session?.sharesFiles == true {
+                if support.isSupported, model.session != nil {
                     ShareFileButton(fileID: file.id, label: file.label)
                         // The server makes the copy it shares.
                         .modifier(NeedsConnection(available: model.connection == .online))

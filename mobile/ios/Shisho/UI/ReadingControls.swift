@@ -103,8 +103,7 @@ struct BookReadingControls: View {
     @State private var addingToList = false
 
     private var status: String? { state?.status }
-    private var canChangeStatus: Bool { model.offers(.readingStatus) }
-    private var canQueue: Bool { model.offers(.toRead) && ReadingTransitions.canQueue(status) }
+    private var canQueue: Bool { ReadingTransitions.canQueue(status) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -132,16 +131,14 @@ struct BookReadingControls: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("book.detail.toReadPlace")
                 }
-                if model.offers(.lists) {
-                    Button { addingToList = true } label: {
-                        Label("Add to List", icon: .listPlus, size: 14, relativeTo: .footnote)
-                            .font(.geist(.footnote, weight: .medium))
-                            .foregroundStyle(Theme.foreground)
-                            .frame(minHeight: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("book.detail.addToList")
+                Button { addingToList = true } label: {
+                    Label("Add to List", icon: .listPlus, size: 14, relativeTo: .footnote)
+                        .font(.geist(.footnote, weight: .medium))
+                        .foregroundStyle(Theme.foreground)
+                        .frame(minHeight: 44)
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("book.detail.addToList")
             }
         }
         .observing(model.session?.store, id: bookID, into: $state) { [bookID] db in
@@ -169,75 +166,59 @@ struct BookReadingControls: View {
     }
 
     private var ratingControl: some View {
-        RatingControl(units: state?.rating, editable: model.offers(.ratings), title: title) { units in
+        RatingControl(units: state?.rating, title: title) { units in
             model.change(.rating(book: bookID, units: units))
         }
     }
 
-    @ViewBuilder
     private var statusControl: some View {
-        if canChangeStatus || canQueue {
-            Menu {
-                if canQueue {
-                    if status == "to_read" {
-                        Button(String(localized: "Remove from To Read")) { model.change(.removeFromToRead(book: bookID)) }
-                            .accessibilityIdentifier("status.toRead.remove")
-                    } else {
-                        Button(String(localized: "Add to To Read")) { model.change(.addToRead(book: bookID)) }
-                            .accessibilityIdentifier("status.toRead.add")
-                    }
-                    Divider()
+        Menu {
+            if canQueue {
+                if status == "to_read" {
+                    Button(String(localized: "Remove from To Read")) { model.change(.removeFromToRead(book: bookID)) }
+                        .accessibilityIdentifier("status.toRead.remove")
+                } else {
+                    Button(String(localized: "Add to To Read")) { model.change(.addToRead(book: bookID)) }
+                        .accessibilityIdentifier("status.toRead.add")
                 }
-                if canChangeStatus {
-                    ForEach(ReadingTransitions.available(status), id: \.self) { transition in
-                        Button(ReadingTransitions.label(transition, status: status, readBefore: state?.readBefore ?? false)) {
-                            model.change(ReadingTransitions.change(transition, book: bookID))
-                        }
-                        .accessibilityIdentifier("status.\(transition.rawValue)")
-                    }
-                    Divider()
-                    if status == "reference" {
-                        Button(String(localized: "Remove from Reference")) { model.change(.removeReference(book: bookID)) }
-                            .accessibilityIdentifier("status.reference.remove")
-                    } else {
-                        Button(String(localized: "Mark as Reference")) {
-                            if state?.underway != nil {
-                                confirmingReference = true
-                            } else {
-                                model.change(.markReference(book: bookID))
-                            }
-                        }
-                        .accessibilityIdentifier("status.reference.mark")
-                    }
-                    if state?.underway != nil {
-                        Button(String(localized: "Mark as not started"), role: .destructive) { confirmingNotStarted = true }
-                            .accessibilityIdentifier("status.notStarted")
-                    }
-                }
-            } label: {
-                statusLabel(chevron: true)
+                Divider()
             }
-            .buttonStyle(SmallOutlineStyle())
-            .accessibilityLabel(String(localized: "Reading status: \(status.map(ReadingStatusLabel.text) ?? String(localized: "Not started"))"))
-            .accessibilityValue(state?.pending == true ? String(localized: "Not synced yet") : "")
-            .accessibilityIdentifier("book.detail.status")
-        } else if status != nil {
-            statusLabel(chevron: false)
-                .font(.geist(.footnote, weight: .medium))
-                .padding(.horizontal, 12)
-                .frame(minHeight: 34)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(String(localized: "Reading status: \(status.map(ReadingStatusLabel.text) ?? "")"))
-                .accessibilityValue(state?.pending == true ? String(localized: "Not synced yet") : "")
-                .accessibilityIdentifier("book.detail.status")
+            ForEach(ReadingTransitions.available(status), id: \.self) { transition in
+                Button(ReadingTransitions.label(transition, status: status, readBefore: state?.readBefore ?? false)) {
+                    model.change(ReadingTransitions.change(transition, book: bookID))
+                }
+                .accessibilityIdentifier("status.\(transition.rawValue)")
+            }
+            Divider()
+            if status == "reference" {
+                Button(String(localized: "Remove from Reference")) { model.change(.removeReference(book: bookID)) }
+                    .accessibilityIdentifier("status.reference.remove")
+            } else {
+                Button(String(localized: "Mark as Reference")) {
+                    if state?.underway != nil {
+                        confirmingReference = true
+                    } else {
+                        model.change(.markReference(book: bookID))
+                    }
+                }
+                .accessibilityIdentifier("status.reference.mark")
+            }
+            if state?.underway != nil {
+                Button(String(localized: "Mark as not started"), role: .destructive) { confirmingNotStarted = true }
+                    .accessibilityIdentifier("status.notStarted")
+            }
+        } label: {
+            statusLabel
         }
+        .buttonStyle(SmallOutlineStyle())
+        .accessibilityLabel(String(localized: "Reading status: \(status.map(ReadingStatusLabel.text) ?? String(localized: "Not started"))"))
+        .accessibilityValue(state?.pending == true ? String(localized: "Not synced yet") : "")
+        .accessibilityIdentifier("book.detail.status")
     }
 
     /// The status as the Library's picker shows its Library: in a small
     /// outlined box (SmallOutlineStyle).
-    private func statusLabel(chevron: Bool) -> some View {
+    private var statusLabel: some View {
         HStack(spacing: 6) {
             Icon(StatusStyle.icon(status), size: 14, relativeTo: .footnote)
                 .foregroundStyle(status.map(StatusStyle.color) ?? Theme.mutedForeground)
@@ -245,11 +226,9 @@ struct BookReadingControls: View {
                 .foregroundStyle(Theme.foreground)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-            if chevron {
-                Icon(.chevronDown, size: 12, relativeTo: .footnote)
-                    .foregroundStyle(Theme.mutedForeground)
-                    .accessibilityHidden(true)
-            }
+            Icon(.chevronDown, size: 12, relativeTo: .footnote)
+                .foregroundStyle(Theme.mutedForeground)
+                .accessibilityHidden(true)
             if state?.pending == true {
                 PendingMark()
             }
@@ -269,12 +248,10 @@ struct PendingMark: View {
 
 /// A Rating in stars, in quarter steps as on the web. The stars open a
 /// sheet to rate, change, or clear it in, with room for quarter stars that
-/// a row this size can't give a finger (RatingSheet). Read only for a
-/// server that doesn't take Ratings from the app.
+/// a row this size can't give a finger (RatingSheet).
 struct RatingControl: View {
     /// Quarter stars, 1 to 20, or nil when unrated.
     let units: Int?
-    let editable: Bool
     /// The Book's title, for the sheet.
     let title: String
     let set: (Int?) -> Void
@@ -284,26 +261,22 @@ struct RatingControl: View {
     @ScaledMetric(relativeTo: .body) private var starSize: CGFloat = 22
 
     var body: some View {
-        if !editable {
-            if let units { RatingStars(units: units) }
-        } else {
-            Button { rating = true } label: {
-                PreciseStars(units: units ?? 0, size: starSize)
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(String(localized: "Rating"))
-            .accessibilityValue(units.map { String(localized: "\(Ratings.text($0)) of 5 stars") } ?? String(localized: "Not rated"))
-            .accessibilityHint(String(localized: "Opens a picker that rates in quarter stars."))
-            .accessibilityIdentifier("book.detail.rating")
-            .sheet(isPresented: $rating) {
-                RatingSheet(title: title, initial: units, set: set)
-                    // Room for the stars and the steps, and all the screen
-                    // at the largest text sizes.
-                    .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(330), .large])
-                    .presentationDragIndicator(.visible)
-            }
+        Button { rating = true } label: {
+            PreciseStars(units: units ?? 0, size: starSize)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "Rating"))
+        .accessibilityValue(units.map { String(localized: "\(Ratings.text($0)) of 5 stars") } ?? String(localized: "Not rated"))
+        .accessibilityHint(String(localized: "Opens a picker that rates in quarter stars."))
+        .accessibilityIdentifier("book.detail.rating")
+        .sheet(isPresented: $rating) {
+            RatingSheet(title: title, initial: units, set: set)
+                // Room for the stars and the steps, and all the screen
+                // at the largest text sizes.
+                .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(330), .large])
+                .presentationDragIndicator(.visible)
         }
     }
 }

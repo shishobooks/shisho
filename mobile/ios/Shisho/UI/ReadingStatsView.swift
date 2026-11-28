@@ -26,23 +26,21 @@ struct ReadingStatsView: View {
         case overview, calendar
     }
 
-    /// The Calendar tab, for a server that has it.
-    private var calendar: Bool { tab == .calendar && model.offers(.readingCalendar) }
+    /// The Calendar tab.
+    private var calendar: Bool { tab == .calendar }
 
     var body: some View {
         ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if model.offers(.readingCalendar) {
-                    Picker(String(localized: "View"), selection: $tab) {
-                        Text("Overview").tag(Tab.overview)
-                        Text("Calendar").tag(Tab.calendar)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
-                    .accessibilityIdentifier("stats.tabs")
+                Picker(String(localized: "View"), selection: $tab) {
+                    Text("Overview").tag(Tab.overview)
+                    Text("Calendar").tag(Tab.calendar)
                 }
+                .pickerStyle(.segmented)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+                .accessibilityIdentifier("stats.tabs")
                 Text(calendar ? String(localized: "Your reading, day by day. Only you can see this.")
                     : String(localized: "Your reading for \(rangeLabel). Only you can see this."))
                     .font(.geist(.subheadline))
@@ -59,9 +57,7 @@ struct ReadingStatsView: View {
             .frame(maxWidth: 900)
             .frame(maxWidth: .infinity)
         }
-        .environment(\.revealCard) { id in
-            withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .top) }
-        }
+        .environment(\.revealCard, CardRevealer(proxy: proxy))
         }
         .miniPlayerClearance()
         .background(Theme.background)
@@ -231,16 +227,30 @@ struct ReadingStatsView: View {
 extension EnvironmentValues {
     /// Scrolls Reading Stats so the view with id shows from its top, as a
     /// breakdown's search does to show its matches above the keyboard.
-    @Entry var revealCard: ((String) -> Void)?
+    @Entry var revealCard: CardRevealer?
 }
 
-/// The steps of purple every chart and bar is drawn in, the web's
-/// `--chart-purple-1` to `-3` in `app/index.css`: reading in the first,
-/// listening in the second. `app/utils/appParity.test.ts` checks the asset
+/// Scrolls Reading Stats to a card. A value rather than a closure, so the
+/// views reading it aren't redrawn each time the screen is: a closure is
+/// never equal to the last one.
+struct CardRevealer: Equatable {
+    let proxy: ScrollViewProxy
+
+    func reveal(_ id: String) {
+        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .top) }
+    }
+
+    /// The screen's one scroll view's, for as long as the screen shows.
+    static func == (lhs: CardRevealer, rhs: CardRevealer) -> Bool { true }
+}
+
+/// The colors every chart and bar is drawn in, the web's `--chart-series-1`
+/// to `-3` in `app/index.css`: reading in the first, purple, and listening in
+/// the second, magenta. `app/utils/appParity.test.ts` checks the asset
 /// catalog's copies match the web's.
 enum StatsColors {
-    static let reading = Color("ChartPurple1")
-    static let listening = Color("ChartPurple2")
+    static let reading = Color("ChartSeries1")
+    static let listening = Color("ChartSeries2")
 }
 
 // MARK: - Tiles
@@ -971,7 +981,7 @@ private struct CountList: View {
                 Task {
                     // After the keyboard's own scrolling, which would undo it.
                     try? await Task.sleep(for: .milliseconds(350))
-                    revealCard?(identifier)
+                    revealCard?.reveal(identifier)
                 }
             }
         }

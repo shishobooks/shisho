@@ -14,7 +14,6 @@ struct LibraryView: View {
     /// Where the Library's heading sits in the page, which moves with the
     /// picker's wrapping, the banners above it, and the text size.
     @State private var headingTop: CGFloat = 110
-    @State private var notes: [JournalNote]?
     /// The sort saved on the web for the Library showing.
     @State private var savedSort: String?
     @State private var showingFilters = false
@@ -54,19 +53,9 @@ struct LibraryView: View {
                         }
                         .padding(.horizontal, GridLayout.margin)
                         .padding(.top, 8)
-                        SyncBanner()
+                        AppNotices()
                             .padding(.horizontal, GridLayout.margin)
-                            .padding(.top, 14)
-                        if let notice = model.replacedAccountNotice, notice.accountID == model.session?.account.id {
-                            ReplacedAccountBanner(removedChanges: notice.removedChanges) { model.dismissReplacedAccountNotice() }
-                                .padding(.horizontal, GridLayout.margin)
-                                .padding(.top, 10)
-                        }
-                        if let notes, !notes.isEmpty {
-                            JournalNotesBanner(notes: notes) { model.dismissJournalNotes() }
-                                .padding(.horizontal, GridLayout.margin)
-                                .padding(.top, 10)
-                        }
+                            .padding(.top, 4)
                         if let books {
                             sectionHeader(count: books.count)
                                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("libraryContent")).minY } action: {
@@ -116,9 +105,6 @@ struct LibraryView: View {
         }
         .tint(Theme.primary)
         .gallerySheets(showingFilters: $showingFilters, showingSort: $showingSort, sort: sort)
-        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $notes) { db in
-            try CatalogStore.journalNotes(db)
-        }
         .observing(model.session?.store, id: BooksQuery(account: model.session?.account.id ?? "", libraryID: model.libraryID,
                                                          filter: model.filter, sort: model.sortSpec),
                    into: $books) { [libraryID, filter = model.filter, sort = model.sortSpec] db in
@@ -248,7 +234,7 @@ private struct LibraryPicker: View {
     }
 }
 
-/// The signed-in account, top right, as the user's initial.
+/// The signed-in account, top right, as its avatar.
 struct AccountButton: View {
     @Environment(AppModel.self) private var model
     let action: () -> Void
@@ -256,7 +242,7 @@ struct AccountButton: View {
     var body: some View {
         Button(action: action) {
             if let account = model.session?.account {
-                AccountAvatar(account: account, size: 34, inToolbar: true)
+                AccountAvatar(account: account, size: 30)
             }
         }
         .accessibilityLabel("Account")

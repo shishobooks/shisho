@@ -8,6 +8,7 @@ struct AccountSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingSignOut = false
     @State private var showingDiagnostics = false
+    @State private var showingLook = false
     @State private var syncState: SyncState?
 
     var body: some View {
@@ -127,7 +128,21 @@ struct AccountSheet: View {
 
     private func identity(_ account: Account) -> some View {
         VStack(spacing: 10) {
-            AccountAvatar(account: account, size: 68)
+            Button { showingLook = true } label: {
+                AccountAvatar(account: account, size: 68)
+                    .overlay(alignment: .bottomTrailing) {
+                        Icon(.pencil, size: 13, relativeTo: nil)
+                            .foregroundStyle(Theme.foreground)
+                            .frame(width: 26, height: 26)
+                            .background(Theme.card, in: Circle())
+                            .overlay(Circle().strokeBorder(Theme.border))
+                            .offset(x: 2, y: 2)
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Change avatar")
+            .accessibilityHint("Picks a color and an icon for this account")
+            .accessibilityIdentifier("account.avatar")
             Text(account.username)
                 .font(.geist(.title3, weight: .bold))
             Text(account.serverURL.host() ?? account.serverURL.absoluteString)
@@ -135,7 +150,9 @@ struct AccountSheet: View {
                 .foregroundStyle(Theme.mutedForeground)
         }
         .padding(.top, 4)
-        .accessibilityElement(children: .combine)
+        .sheet(isPresented: $showingLook) {
+            AccountLookSheet(account: account)
+        }
     }
 
     private func detailsCard(_ account: Account) -> some View {
@@ -270,37 +287,5 @@ struct DiagnosticsSheet: View {
         }
         .tint(Theme.primary)
         .presentationDragIndicator(.visible)
-    }
-}
-
-/// An account's initial in a circle of its own color, so accounts whose
-/// usernames start alike still look different. The color comes from the
-/// account's id on this device, so it stays the same across launches.
-struct AccountAvatar: View {
-    let account: Account
-    let size: CGFloat
-    /// In the toolbar, where iOS 26 already sets the button in a circle.
-    var inToolbar = false
-
-    private var color: Color {
-        let hue = Double(account.id.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF } % 360) / 360
-        return Color(hue: hue, saturation: 0.55, brightness: 0.72)
-    }
-
-    var body: some View {
-        let initial = Text(String(account.username.prefix(1).uppercased()))
-            .font(.geist(size: size * 0.44, relativeTo: .title, weight: .semibold))
-            .foregroundStyle(color)
-        Group {
-            if #available(iOS 26, *), inToolbar {
-                initial
-            } else {
-                initial
-                    .frame(width: size, height: size)
-                    .background(color.opacity(0.14), in: Circle())
-                    .overlay(Circle().strokeBorder(color.opacity(0.3)))
-            }
-        }
-        .accessibilityHidden(true)
     }
 }

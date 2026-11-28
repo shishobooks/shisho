@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -105,19 +104,6 @@ func (f *readingFixture) toRead() []int {
 		out = append(out, id)
 	}
 	return out
-}
-
-// The server offers each of the reading events and the stats route.
-func TestCapabilities_ListReadingRecord(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	rec := f.do(call{path: "/mobile/server", protocol: "1"})
-	require.Equal(t, http.StatusOK, rec.Code)
-	listed := strings.Split(rec.Header().Get(HeaderCapabilities), ",")
-	for _, c := range []string{CapabilityReadingStatus, CapabilityRatings, CapabilityToRead, CapabilityLists,
-		CapabilityClearPosition, CapabilityReadingStats} {
-		assert.Contains(t, listed, c)
-	}
 }
 
 // Each Read-through action does what the web's status menu does, at the

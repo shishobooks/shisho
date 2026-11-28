@@ -282,9 +282,11 @@ struct BookDetailView: View {
                 (Route.resource(.genre, id: $0.id, name: $0.name), $0.name)
             }, identifier: "book.detail.genre"))))
         }
-        if !book.tags.isEmpty {
-            rows.append(InfoRow(label: String(localized: "Tags"), value: AnyView(LinkChips(items: book.tags.map {
-                (Route.resource(.tag, id: $0.id, name: $0.name), $0.name)
+        // Plain tags under Tags, then a row for each tag namespace, in the
+        // Library's order, as the web's Book page lists them.
+        for group in TagNamespaces.group(book.tags, name: \.name, namespaces: book.tagNamespaces) {
+            rows.append(InfoRow(label: group.namespace ?? String(localized: "Tags"), value: AnyView(LinkChips(items: group.tags.map {
+                (Route.resource(.tag, id: $0.tag.id, name: $0.tag.name), $0.name)
             }, identifier: "book.detail.tag"))))
         }
         if let published = book.published {
@@ -323,6 +325,7 @@ private struct FileCard: View {
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
     private var isReadable: Bool { CatalogStore.readableTypes.contains(file.fileType) }
+    private var support: FileSupport { FileSupport(fileType: file.fileType) }
 
     private var readLabel: String {
         String(localized: "Read \(name)")
@@ -404,7 +407,11 @@ private struct FileCard: View {
                     Text(name)
                         .font(.geist(.subheadline, weight: .semibold))
                         .lineLimit(2)
-                    if FileTypes.isKnown(file.fileType) {
+                    if let notice = support.notice {
+                        Label(verbatim: notice, icon: .circleAlert, size: 14, relativeTo: .footnote)
+                            .font(.geist(.footnote))
+                            .foregroundStyle(Theme.mutedForeground)
+                    } else {
                         // The chip stays centered on facts that wrap, and sits
                         // above them at accessibility text sizes, so they
                         // keep the row's width.
@@ -430,10 +437,6 @@ private struct FileCard: View {
                                 .padding(.top, 3)
                         }
                         DownloadStatusLine(fileID: file.id, row: download ?? nil)
-                    } else {
-                        Label("Not supported in this version of the app", icon: .circleAlert, size: 14, relativeTo: .footnote)
-                            .font(.geist(.footnote))
-                            .foregroundStyle(Theme.mutedForeground)
                     }
                 }
                 .frame(maxWidth: .infinity, minHeight: Self.coverSlot, alignment: .leading)
@@ -459,7 +462,7 @@ private struct FileCard: View {
                     }
                     .accessibilityIdentifier("file.clearPosition.\(file.id)")
                 }
-                FileDownloadMenu(fileID: file.id, supported: FileTypes.isKnown(file.fileType), row: download ?? nil)
+                FileDownloadMenu(fileID: file.id, support: support, row: download ?? nil)
             }
             actions
         }
@@ -472,9 +475,9 @@ private struct FileCard: View {
         .clearPositionConfirmation($clearing)
     }
 
-    /// The File has a saved place, and the server takes clearing it.
+    /// The File has a saved place to clear.
     private var canClear: Bool {
-        model.offers(.clearPosition) && progress != nil
+        progress != nil
     }
 
     private var actions: some View {
@@ -517,7 +520,7 @@ private struct FileCard: View {
             // Every File downloads on its own, so the space goes only to
             // what the user wants offline. One this version doesn't know
             // shows Download, disabled.
-            DownloadControl(fileID: file.id, label: name, supported: FileTypes.isKnown(file.fileType), row: download ?? nil)
+            DownloadControl(fileID: file.id, label: name, support: support, row: download ?? nil)
         }
     }
 
@@ -563,27 +566,6 @@ enum IdentifierLabel {
         case "google": "Google"
         default: type.replacingOccurrences(of: "_", with: " ").uppercased()
         }
-    }
-}
-
-/// A Rating in stars, from quarter stars, read only here.
-struct RatingStars: View {
-    let units: Int
-
-    private var stars: Double { Double(units) / 4 }
-
-    var body: some View {
-        HStack(spacing: 2) {
-            // Filled to the exact quarter, as the editable stars are.
-            PreciseStars(units: units, size: 17)
-            Text(stars.formatted(.number.precision(.fractionLength(0...2))))
-                .font(.geist(.subheadline))
-                .foregroundStyle(Theme.mutedForeground)
-                .padding(.leading, 4)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "Rated \(stars.formatted(.number.precision(.fractionLength(0...2)))) of 5 stars"))
-        .accessibilityIdentifier("book.detail.rating")
     }
 }
 

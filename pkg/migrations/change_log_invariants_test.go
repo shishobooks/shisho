@@ -77,7 +77,6 @@ const (
 	reasonPrimaryKey = "the primary key, which a row never changes"
 	reasonBookkeep   = "bookkeeping the app doesn't show"
 	reasonSource     = "provenance, which the app doesn't show"
-	reasonNotYet     = "not in the app's documents yet"
 	// reasonDeviceOnlyName: a Reading Position carries only its Device's name.
 	reasonDeviceOnlyName = "a Reading Position carries only its Device's name"
 	reasonLibrary        = "the Library is read from the Book"
@@ -92,11 +91,9 @@ var columnsNotCompared = map[string]string{
 	"libraries.created_at":              reasonBookkeep,
 	"libraries.updated_at":              reasonBookkeep,
 	"libraries.organize_file_structure": "a server-side setting",
-	"libraries.tag_namespaces":          reasonNotYet,
 
 	"books.id":                 reasonPrimaryKey,
 	"books.updated_at":         reasonBookkeep,
-	"books.filepath":           "where the server keeps the Book",
 	"books.title_source":       reasonSource,
 	"books.sort_title_source":  reasonSource,
 	"books.subtitle_source":    reasonSource,
