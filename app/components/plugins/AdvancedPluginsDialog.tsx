@@ -26,13 +26,16 @@ export const AdvancedPluginsDialog = ({
 }: AdvancedPluginsDialogProps) => {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col overflow-hidden">
+      <DialogContent className="max-h-[85vh] max-w-3xl">
         <DialogHeader>
           <DialogTitle>Advanced plugin settings</DialogTitle>
         </DialogHeader>
-        <DialogBody className="flex flex-1 flex-col overflow-hidden">
+        {/* The tabs stay put and only the section below them scrolls, and
+            only up and down: a section too wide for a phone is a layout bug
+            to fix there, not something to pan sideways to. */}
+        <DialogBody className="flex flex-col overflow-hidden">
           <Tabs
-            className="flex flex-col overflow-hidden"
+            className="flex min-h-0 flex-1 flex-col"
             onValueChange={(value) => {
               if (isAdvancedSection(value)) {
                 onSectionChange(value);
@@ -40,11 +43,11 @@ export const AdvancedPluginsDialog = ({
             }}
             value={section}
           >
-            <TabsList className="w-full justify-start">
+            <TabsList className="w-full shrink-0 justify-start">
               <TabsTrigger value="order">Order</TabsTrigger>
               <TabsTrigger value="repositories">Repositories</TabsTrigger>
             </TabsList>
-            <div className="overflow-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
               <TabsContent className="mt-4" value="order">
                 <AdvancedOrderSection />
               </TabsContent>

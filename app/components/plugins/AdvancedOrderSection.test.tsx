@@ -92,6 +92,25 @@ describe("AdvancedOrderSection save", () => {
     expect(save).toBeDisabled();
   });
 
+  it("shows only the mode's name in its select, not the description", async () => {
+    setAuth({ permissions: ["config:read", "config:write", "books:read"] });
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) =>
+      path === "/plugins/order/metadataEnricher"
+        ? [{ scope: "shisho", plugin_id: "first", mode: "enabled" }]
+        : [],
+    );
+
+    renderSection();
+
+    const mode = await screen.findByRole("combobox", {
+      name: "When this plugin runs",
+    });
+    // The description under each option would set the trigger's width and
+    // push the row past a phone's screen.
+    expect(mode).toHaveTextContent("For every new file");
+    expect(mode).not.toHaveTextContent(/manual identification/);
+  });
+
   it("names the move buttons and enables Save Order after a move", async () => {
     setAuth({ permissions: ["config:read", "config:write", "books:read"] });
     vi.spyOn(API, "request").mockImplementation(async (_method, path) =>

@@ -27,6 +27,14 @@ import { useCan } from "@/hooks/useCan";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 
+// The trigger shows only the name: each option also carries a description,
+// which would otherwise set the trigger's width.
+const MODE_LABELS: Record<PluginMode, string> = {
+  enabled: "For every new file",
+  manual_only: "Only when manually identifying",
+  disabled: "Never",
+};
+
 const HOOK_TYPES: { label: string; value: PluginHookType }[] = [
   { label: "Metadata Enricher", value: "metadataEnricher" },
   { label: "File Parser", value: "fileParser" },
@@ -176,7 +184,7 @@ export const AdvancedOrderSection = () => {
           {displayOrder.map((item, index) => (
             <div
               className={cn(
-                "flex items-center justify-between gap-3 rounded-md border p-3",
+                "flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3",
                 item.mode === "disabled"
                   ? "border-border/50 opacity-60"
                   : item.mode === "manual_only"
@@ -185,17 +193,17 @@ export const AdvancedOrderSection = () => {
               )}
               key={`${item.scope}/${item.plugin_id}`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
                 <span className="font-mono text-xs text-muted-foreground">
                   {index + 1}
                 </span>
-                <span className="text-sm">
+                <span className="min-w-0 break-words text-sm">
                   {getPluginName(item.scope, item.plugin_id)}
                 </span>
                 <Badge variant="secondary">{item.scope}</Badge>
               </div>
               {canWrite && (
-                <div className="flex items-center gap-1">
+                <div className="flex min-w-0 shrink-0 items-center gap-1">
                   <Select
                     onValueChange={(value) =>
                       handleModeChange(index, value as PluginMode)
@@ -204,10 +212,12 @@ export const AdvancedOrderSection = () => {
                   >
                     <SelectTrigger
                       aria-label="When this plugin runs"
-                      className="h-8 w-auto gap-2 text-xs"
+                      className="h-8 w-auto min-w-0 flex-1 gap-2 text-xs sm:flex-none"
                     >
-                      <span className="text-muted-foreground">Runs:</span>
-                      <SelectValue />
+                      <span className="shrink-0 text-muted-foreground">
+                        Runs:
+                      </span>
+                      <SelectValue>{MODE_LABELS[item.mode]}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="enabled">

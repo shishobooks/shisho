@@ -62,7 +62,7 @@ export const AdvancedRepositoriesSection = () => {
               key={repo.scope}
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {repo.is_official && (
                     <BadgeCheck
                       aria-label="Official repository"
@@ -153,10 +153,10 @@ export const AdvancedRepositoriesSection = () => {
 
       {canWrite && (
         <form
-          className="mt-6 flex items-end gap-3 rounded-md border border-border p-4"
+          className="mt-6 flex flex-col gap-3 rounded-md border border-border p-4 sm:flex-row sm:items-end"
           onSubmit={handleAdd}
         >
-          <div className="flex-1 space-y-1">
+          <div className="min-w-0 flex-1 space-y-1">
             <Label className="text-xs" htmlFor="repo-url">
               Repository URL
             </Label>
@@ -167,7 +167,7 @@ export const AdvancedRepositoriesSection = () => {
               value={newUrl}
             />
           </div>
-          <div className="w-40 space-y-1">
+          <div className="space-y-1 sm:w-40">
             <Label className="text-xs" htmlFor="repo-scope">
               Scope
             </Label>
