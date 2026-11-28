@@ -202,7 +202,7 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
                 </Badge>
               </div>
               {(isCustomized || localPlugins) && (
-                <div className="ml-auto flex shrink-0 items-center gap-2">
+                <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
                   <Select
                     onValueChange={(value) =>
                       handleModeChange(
@@ -226,24 +226,26 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
                       <SelectItem value="disabled">Disabled</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button
-                    aria-label="Move plugin up"
-                    disabled={index === 0}
-                    onClick={() => handleMove(index, "up")}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <ArrowUp className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    aria-label="Move plugin down"
-                    disabled={index === displayPlugins.length - 1}
-                    onClick={() => handleMove(index, "down")}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <ArrowDown className="h-4 w-4" />
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      aria-label="Move plugin up"
+                      disabled={index === 0}
+                      onClick={() => handleMove(index, "up")}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      aria-label="Move plugin down"
+                      disabled={index === displayPlugins.length - 1}
+                      onClick={() => handleMove(index, "down")}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

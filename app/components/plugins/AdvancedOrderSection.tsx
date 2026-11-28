@@ -209,7 +209,7 @@ export const AdvancedOrderSection = () => {
               )}
               key={`${item.scope}/${item.plugin_id}`}
             >
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 sm:flex-auto">
+              <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1 sm:w-auto sm:flex-auto">
                 <span className="font-mono text-xs text-muted-foreground">
                   {index + 1}
                 </span>
@@ -224,10 +224,9 @@ export const AdvancedOrderSection = () => {
                 </Badge>
               </div>
               {canWrite && (
-                <>
-                  {/* On phones the select takes a line of its own below the
-                      name and arrows, and its label wraps rather than being
-                      cut off on the narrowest screens. */}
+                // On phones the controls take the line below the name, and the
+                // select's label wraps rather than being cut off.
+                <div className="ml-auto flex min-w-0 flex-1 items-center gap-1 sm:flex-none">
                   <Select
                     onValueChange={(value) =>
                       handleModeChange(index, value as PluginMode)
@@ -236,7 +235,7 @@ export const AdvancedOrderSection = () => {
                   >
                     <SelectTrigger
                       aria-label="When this plugin runs"
-                      className="order-last h-auto min-h-8 basis-full justify-start gap-2 whitespace-normal text-left text-xs sm:order-none sm:h-8 sm:w-auto sm:basis-auto sm:whitespace-nowrap [&>span]:line-clamp-2 sm:[&>span]:line-clamp-1 [&>svg]:ml-auto"
+                      className="h-auto min-h-8 min-w-0 flex-1 justify-start gap-2 whitespace-normal text-left text-xs sm:h-8 sm:w-auto sm:flex-none sm:whitespace-nowrap [&>span]:line-clamp-none sm:[&>span]:line-clamp-1 [&>svg]:ml-auto"
                     >
                       <span className="shrink-0 text-muted-foreground">
                         Runs:
@@ -266,27 +265,25 @@ export const AdvancedOrderSection = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      aria-label="Move plugin up"
-                      disabled={index === 0}
-                      onClick={() => handleMove(index, "up")}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      <ArrowUp aria-hidden="true" className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      aria-label="Move plugin down"
-                      disabled={index === displayOrder.length - 1}
-                      onClick={() => handleMove(index, "down")}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      <ArrowDown aria-hidden="true" className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </>
+                  <Button
+                    aria-label="Move plugin up"
+                    disabled={index === 0}
+                    onClick={() => handleMove(index, "up")}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <ArrowUp aria-hidden="true" className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    aria-label="Move plugin down"
+                    disabled={index === displayOrder.length - 1}
+                    onClick={() => handleMove(index, "down")}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <ArrowDown aria-hidden="true" className="h-4 w-4" />
+                  </Button>
+                </div>
               )}
             </div>
           ))}
