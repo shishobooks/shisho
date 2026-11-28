@@ -90,9 +90,14 @@ EOF
     git mv app/assets/fonts/Literata.woff2 app/vendor/Literata.woff2
     git commit -q -m "a font moved out of the bundle"
     git tag moved
+    git tag accented-base
     printf 'font\n' >"app/assets/fonts/Café.woff2"
     git add -A
     git commit -q -m "a font with an accent"
+    git tag accented
+    printf 'font\n' >'app/assets/fonts/Caf"e.woff2'
+    git add -A
+    git commit -q -m "a font with a quote"
 )
 check() {
     local want="$1" label="$2" base="$3" head="$4" got
@@ -107,7 +112,8 @@ check false "Go that generates the same Swift" base server
 check true "Go that generates new Swift" server types
 check true "Go modules that generate new Swift" types gomod
 check true "a rename out of a bundled folder" gomod moved
-check true "a name git would quote" moved master
+check true "a name with an accent" accented-base accented
+check true "a name with a quote" accented master
 
 # A generator that fails on either side fails the script, rather than
 # reading as a change or no change. The head is generated in the clone

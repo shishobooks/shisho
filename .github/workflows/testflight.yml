@@ -23,9 +23,10 @@ on:
 # Store Connect rising. A run waiting behind another is replaced by a newer
 # one, which needs no record of it: each run compares master with the last
 # successful run's commit, so a replaced, cancelled, or failed run's change
-# goes out with the next run.
+# goes out with the next run. By ref, so a run started on another branch,
+# which does nothing, never replaces one of master's.
 concurrency:
-  group: testflight
+  group: testflight-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -42,6 +43,15 @@ jobs:
     outputs:
       changed: ${{ steps.changes.outputs.changed }}
     steps:
+      # A rerun keeps its run number, which is the build number, so it could
+      # land below a newer upload or repeat one. It fails rather than skips:
+      # a skipped run would pass for a successful one that shipped its
+      # commit.
+      - name: Refuse a rerun
+        if: github.run_attempt != 1
+        run: |
+          echo "::error::A rerun keeps its build number. Start a new run from the Actions tab instead."
+          exit 1
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -57,19 +67,12 @@ jobs:
             exit 0
           fi
           last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow testflight.yml --branch master \
-            --status success --limit 1 --json headSha,number --jq '.[0] // empty | "\(.number) \(.headSha)"')
+            --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
           if [ -z "$last" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          read -r number sha <<<"$last"
-          # A rerun of an older run: a newer one has already covered it.
-          if [ "$number" -gt "$GITHUB_RUN_NUMBER" ]; then
-            echo "Run $number, newer than this one, already covered this commit." >> "$GITHUB_STEP_SUMMARY"
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          changed=$(scripts/testflight-changes.sh "$sha")
+          changed=$(scripts/testflight-changes.sh "$last")
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
   upload:
@@ -79,10 +82,14 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     steps:
+      # Rerunning only this job skips the check above.
+      - name: Refuse a rerun
+        if: github.run_attempt != 1
+        run: |
+          echo "::error::A rerun keeps its build number. Start a new run from the Actions tab instead."
+          exit 1
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
-      # A rerun keeps the run number, which App Store Connect refuses once
-      # the first attempt has uploaded; a new run gets a new number.
       - name: Archive
         run: mise ios:archive --build-number "$GITHUB_RUN_NUMBER"
       - name: Sign and upload

@@ -41,12 +41,19 @@ if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
     exit 0
 fi
 
-# Into a variable first: a failed diff inside <(...) would pass for an
-# empty one, and skip a build. Unquoted, so a name with an accent still
-# matches its folder.
-paths=$(git -c core.quotePath=false diff --name-only --no-renames "$base" HEAD)
+tmp=$(mktemp -d)
+cleanup() {
+    git worktree remove --force "$tmp/base" >/dev/null 2>&1 || true
+    rm -rf "$tmp"
+}
+trap cleanup EXIT
+
+# Into a file first: a failed diff inside <(...) would pass for an empty
+# one, and skip a build. NUL-separated, so git never quotes a name, which
+# would stop it matching its folder.
+git diff -z --name-only --no-renames "$base" HEAD >"$tmp/paths"
 go_changed=false
-while IFS= read -r path; do
+while IFS= read -r -d '' path; do
     if app_path "$path"; then
         echo true
         exit 0
@@ -55,7 +62,7 @@ while IFS= read -r path; do
         # go.mod too: a dependency's types can reach the API types.
         *.go | go.mod | go.sum | tygo.yaml) go_changed=true ;;
     esac
-done <<<"$paths"
+done <"$tmp/paths"
 if [ "$go_changed" = false ]; then
     echo false
     exit 0
@@ -63,12 +70,6 @@ fi
 
 # Each side generates with its own generator, as its own build would.
 # TESTFLIGHT_APPTYPES stands in for it in the script's tests.
-tmp=$(mktemp -d)
-cleanup() {
-    git worktree remove --force "$tmp/base" >/dev/null 2>&1 || true
-    rm -rf "$tmp"
-}
-trap cleanup EXIT
 generate() {
     local dir="$1" out="$2"
     (
