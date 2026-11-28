@@ -155,8 +155,8 @@ description = "Run JS unit tests"
 run = "pnpm test:unit"
 
 [tasks."test:scripts"]
-description = "Run the script tests (changelog generation, em-dash check, Swift concurrency check, the app checks' path filter, doc reference check, tool version check)"
-run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh", "./scripts/app-changes_test.sh", "./scripts/check-swift-concurrency_test.sh", "go test ./tools/checkdocrefs ./tools/checkversions"]
+description = "Run the script tests (changelog generation, em-dash check, Swift concurrency check, the app checks' and TestFlight's path filters, doc reference check, tool version check)"
+run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh", "./scripts/app-changes_test.sh", "./scripts/testflight-changes_test.sh", "./scripts/check-swift-concurrency_test.sh", "go test ./tools/checkdocrefs ./tools/checkversions"]
 
 [tasks."test:e2e"]
 description = "Run E2E tests"
@@ -368,6 +368,66 @@ else
   xcrun simctl install "$usage_simulator" "$app"
   xcrun simctl launch "$usage_simulator" "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
 fi
+'''
+
+# TestFlight's builds (.github/workflows/testflight.yml). The archive isn't
+# signed by xcodebuild: automatic signing would want a development
+# certificate whose private key is in the Keychain, which a CI runner never
+# has. It's signed ad hoc with the app's entitlements instead, so the export
+# keeps CarPlay's when it signs for the App Store: exported from an unsigned
+# archive, the app loses them and the export still succeeds.
+[tasks."ios:archive"]
+description = "Archive a Release build of the iOS app for App Store Connect, into mobile/ios/build/Shisho.xcarchive"
+usage = '''
+flag "--build-number <number>" help="The build number (CFBundleVersion). Omit it to keep the project's."
+'''
+depends = ["ios:generate"]
+dir = "mobile/ios"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+archive=build/Shisho.xcarchive
+rm -rf "$archive"
+xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Release -destination 'generic/platform=iOS' \
+  -derivedDataPath build/DerivedData -archivePath "$archive" CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO \
+  ${usage_build_number:+CURRENT_PROJECT_VERSION="$usage_build_number"} -quiet archive
+# The entitlements Release signs with, from the build settings, so a
+# change in the xcconfigs reaches the upload too.
+entitlements=$(xcodebuild -project Shisho.xcodeproj -target Shisho -configuration Release -sdk iphoneos -showBuildSettings 2>/dev/null |
+  sed -nE 's/^ *CODE_SIGN_ENTITLEMENTS = (.*)$/\1/p')
+codesign --force --sign - ${entitlements:+--entitlements "$entitlements"} "$archive/Products/Applications/Shisho.app"
+'''
+
+# Signs with the team's cloud-managed distribution certificate, which Apple
+# keeps, through an App Store Connect API key, so nothing is signed in to
+# Xcode or kept in the Keychain. The key's role has to be Admin: App
+# Manager keys get a cloud signing permission error.
+[tasks."ios:upload"]
+description = "Sign the archive from ios:archive for the App Store and upload it to App Store Connect, with an API key from APP_STORE_CONNECT_KEY_PATH, _KEY_ID, and _ISSUER_ID"
+usage = '''
+flag "--export-only" help="Write the signed .ipa to mobile/ios/build/export instead of uploading it"
+'''
+dir = "mobile/ios"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+: "${APP_STORE_CONNECT_KEY_PATH:?Set it to the absolute path of the API key .p8 file}"
+: "${APP_STORE_CONNECT_KEY_ID:?Set it to the API key id}"
+: "${APP_STORE_CONNECT_ISSUER_ID:?Set it to the issuer id on the API keys page}"
+case "$APP_STORE_CONNECT_KEY_PATH" in
+  /*) ;;
+  *) echo "APP_STORE_CONNECT_KEY_PATH must be an absolute path" >&2; exit 1 ;;
+esac
+options=Config/ExportOptions.plist
+if [ "${usage_export_only:-false}" = true ]; then
+  options=build/ExportOptions.plist
+  cp Config/ExportOptions.plist "$options"
+  plutil -replace destination -string export "$options"
+fi
+rm -rf build/export
+xcodebuild -exportArchive -archivePath build/Shisho.xcarchive -exportPath build/export -exportOptionsPlist "$options" \
+  -allowProvisioningUpdates -authenticationKeyPath "$APP_STORE_CONNECT_KEY_PATH" \
+  -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
 '''
 
 [tasks."ios:test:api"]

@@ -9,3 +9,11 @@ Pull requests squash-merge with the PR body as the commit message, so these bull
 ## Releases
 
 `mise release <version>` cuts a release (`--dry-run` prints the changelog entry and changes nothing); `scripts/release.sh` is the procedure. The comments in `.goreleaser.yaml` explain why breaking changes appear only in the release header.
+
+## TestFlight builds of the Shisho app
+
+`.github/workflows/testflight.yml` uploads an iOS build to App Store Connect when a push to master finds the app changed since the last successful run, as `scripts/testflight-changes.sh` decides, and on a manual run on master from the Actions tab. App Store Connect gives each processed build to the internal testing group, the maintainer and their partner, through the group's automatic distribution; internal testers need no Beta App Review. TestFlight's copy is the everyday Shisho on their phones. How the archive is signed, and why the API key in the repository secrets is an Admin key, is in the comments on `ios:archive` and `ios:upload` in `mise.toml`.
+
+- **A failed upload goes out with the next push to master, whatever it changes.** To ship it sooner, start a manual run. Rerunning the failed run fails at once: a rerun keeps its run number, which is the build number, so it could land below a newer upload.
+- **A change only to how the build is made, such as the tasks in `mise.toml`, uploads nothing by itself.** Start a manual run to ship it.
+- **To check signing without uploading**, run `mise ios:archive`, then `mise ios:upload --export-only` with the API key in the environment it names. `codesign -d --entitlements -` on the app in the `.ipa` it writes should list CarPlay's. An export from an archive that lost them still succeeds, so look. `xcrun altool --validate-app` with the same key then runs App Store Connect's checks on the `.ipa` without using up a build number.

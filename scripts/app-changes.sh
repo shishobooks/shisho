@@ -38,7 +38,7 @@ while IFS= read -r path || [ -n "$path" ]; do
             vite.config.ts | vitest.config.ts | vitest.setup.ts | playwright.config.ts | \
             website.playwright.config.ts | tsconfig*.json | .prettierrc | .prettierignore | \
             Dockerfile | .dockerignore | docker-compose.yml | .goreleaser.yaml | shisho.example.yaml | \
-            .github/workflows/docs.yml | .github/workflows/demo.yml) ;;
+            .github/workflows/docs.yml | .github/workflows/demo.yml | .github/workflows/testflight.yml) ;;
         "") ;;
         *) changed=true ;;
     esac

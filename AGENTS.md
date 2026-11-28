@@ -33,7 +33,7 @@ Repo-wide topic docs:
 
 - Read `docs/agents/docker-and-deploy.md` before changing the `Dockerfile`, image smoke tests, the release or demo workflows, the server listener or frontend serving, or anything under `demo/`.
 - Read `docs/agents/dev-servers.md` before adding or changing a `mise start*` or `mise docs` task, or anything that picks a dev port or names the session cookie.
-- Read `docs/agents/releases.md` before writing a breaking change's upgrade notes, cutting a release, or changing `scripts/` or the release workflow.
+- Read `docs/agents/releases.md` before writing a breaking change's upgrade notes, cutting a release, or changing `scripts/`, the release workflow, or how TestFlight builds are made.
 
 ## Adding to these files
 

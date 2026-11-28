@@ -41,6 +41,9 @@ targets:
       - path: Shisho/Reader/ReaderWeb
         type: folder
         buildPhase: resources
+      # A folder from outside mobile/ios also goes in the paths that
+      # scripts/app-changes.sh and scripts/testflight-changes.sh count as the
+      # app's, or changing it runs no app checks and uploads no build.
       - path: ../../app/libraries/foliate
         type: folder
         buildPhase: resources

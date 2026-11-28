@@ -39,6 +39,7 @@ expect false "the web e2e tests" "e2e/reader.spec.ts"
 expect false "the KOReader plugin" "koreader-plugin/shisho.koplugin/main.lua"
 expect false "JS dependencies" "pnpm-lock.yaml"
 expect false "the docs workflow" ".github/workflows/docs.yml"
+expect false "the TestFlight workflow" ".github/workflows/testflight.yml"
 expect false "no paths" ""
 
 # One path that counts is enough.
