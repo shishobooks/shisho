@@ -69,12 +69,20 @@ export const AdvancedRepositoriesSection = () => {
                       className="h-4 w-4 shrink-0 text-primary"
                     />
                   )}
-                  <h3 className="text-sm font-medium">
+                  <h3 className="min-w-0 break-words text-sm font-medium">
                     {repo.name ?? repo.scope}
                   </h3>
-                  <Badge variant="secondary">{repo.scope}</Badge>
+                  <Badge
+                    className="max-w-full whitespace-normal break-all"
+                    variant="secondary"
+                  >
+                    {repo.scope}
+                  </Badge>
                 </div>
-                <p className="mt-1 truncate text-xs text-muted-foreground">
+                <p
+                  className="mt-1 truncate text-xs text-muted-foreground"
+                  title={repo.url}
+                >
                   {repo.url}
                 </p>
                 {repo.last_fetched_at && (
@@ -84,7 +92,7 @@ export const AdvancedRepositoriesSection = () => {
                   </p>
                 )}
                 {repo.fetch_error && (
-                  <p className="mt-1 text-xs text-destructive">
+                  <p className="mt-1 break-words text-xs text-destructive">
                     Sync error: {repo.fetch_error}
                   </p>
                 )}

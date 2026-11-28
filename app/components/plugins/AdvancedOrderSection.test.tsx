@@ -96,19 +96,30 @@ describe("AdvancedOrderSection save", () => {
     setAuth({ permissions: ["config:read", "config:write", "books:read"] });
     vi.spyOn(API, "request").mockImplementation(async (_method, path) =>
       path === "/plugins/order/metadataEnricher"
-        ? [{ scope: "shisho", plugin_id: "first", mode: "enabled" }]
+        ? [
+            { scope: "shisho", plugin_id: "first", mode: "enabled" },
+            { scope: "shisho", plugin_id: "second", mode: "manual_only" },
+          ]
         : [],
     );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
     renderSection();
 
-    const mode = await screen.findByRole("combobox", {
+    const [first, second] = await screen.findAllByRole("combobox", {
       name: "When this plugin runs",
     });
     // The description under each option would set the trigger's width and
     // push the row past a phone's screen.
-    expect(mode).toHaveTextContent("For every new file");
-    expect(mode).not.toHaveTextContent(/manual identification/);
+    expect(first).toHaveTextContent("For every new file");
+    expect(first).not.toHaveTextContent(/manual identification/);
+    expect(second).toHaveTextContent("Only when manually identifying");
+    expect(second).not.toHaveTextContent(/Skipped/);
+
+    await user.click(first);
+    await user.click(screen.getByRole("option", { name: /^Never/ }));
+    expect(first).toHaveTextContent("Never");
+    expect(first).not.toHaveTextContent(/inactive/);
   });
 
   it("names the move buttons and enables Save Order after a move", async () => {

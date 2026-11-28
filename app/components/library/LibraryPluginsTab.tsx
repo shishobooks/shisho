@@ -140,7 +140,7 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Label className="text-sm" htmlFor="lib-hook-type-select">
           Hook Type
         </Label>
@@ -178,7 +178,7 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
           {displayPlugins.map((plugin, index) => (
             <div
               className={cn(
-                "flex items-center justify-between gap-3 rounded-md border p-3",
+                "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border p-3",
                 plugin.mode === "disabled"
                   ? "border-border/50 opacity-60"
                   : plugin.mode === "manual_only"
@@ -187,15 +187,22 @@ const LibraryPluginsTab = ({ libraryId, onHasChangesChange }: Props) => {
               )}
               key={`${plugin.scope}/${plugin.id}`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-auto flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="text-xs font-mono text-muted-foreground">
                   {index + 1}
                 </span>
-                <span className="text-sm">{plugin.name}</span>
-                <Badge variant="secondary">{plugin.scope}</Badge>
+                <span className="min-w-0 break-words text-sm">
+                  {plugin.name}
+                </span>
+                <Badge
+                  className="max-w-full whitespace-normal break-all"
+                  variant="secondary"
+                >
+                  {plugin.scope}
+                </Badge>
               </div>
               {(isCustomized || localPlugins) && (
-                <div className="flex items-center gap-2">
+                <div className="ml-auto flex shrink-0 items-center gap-2">
                   <Select
                     onValueChange={(value) =>
                       handleModeChange(
