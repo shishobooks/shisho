@@ -105,8 +105,17 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertNil(byName["Circle: Not Here"]?.shownName, "shown whole")
         XCTAssertEqual(byName["Full Color"]?.namespaces, [nil])
 
+        // A third Library lists the same namespace in other letters, with a
+        // Book of the same tag: one namespace, its Books counted together.
+        let zines = #"{"kind":"library","id":3,"library_id":3,"library":{"id":3,"name":"Zines","cover_aspect_ratio":"book","tag_namespaces":["circle"]}}"#
+        let zine = book(5, "Zine", library: 3).replacingOccurrences(of: desert, with: #""tags":[{"tag_id":5,"name":"Circle: Moon Factory"}]"#)
+        try store.apply(page(#"{"entries":[\#(zines),\#(zine),{"kind":"tag","id":5,"library_id":3,"tag":{"id":5,"library_id":3,"name":"Circle: Moon Factory","aliases":[]}}],"cursor":10}"#))
+        let both = try store.pool.read { try CatalogStore.filterOptions($0, libraryID: nil) }.tags.first { $0.name == "Circle: Moon Factory" }
+        XCTAssertEqual(both?.count, 2)
+        XCTAssertEqual(both?.namespaces.count, 1)
+
         // A Library sent again with its namespaces changed.
-        try store.apply(page(#"{"entries":[{"kind":"library","id":2,"library_id":2,"library":{"id":2,"name":"Doujin","cover_aspect_ratio":"book","tag_namespaces":[]}}],"cursor":10}"#))
+        try store.apply(page(#"{"entries":[{"kind":"library","id":2,"library_id":2,"library":{"id":2,"name":"Doujin","cover_aspect_ratio":"book","tag_namespaces":[]}}],"cursor":11}"#))
         XCTAssertNil(try store.pool.read { try CatalogStore.resource($0, kind: .tag, id: 2) }?.namespace)
     }
 

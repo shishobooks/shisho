@@ -428,7 +428,7 @@ func init() {
 			// development database may have run them. It would skip itself
 			// there, keeping that database's older change log, so it stops.
 			var replaced []string
-			err := tx.NewRaw("SELECT name FROM bun_migrations WHERE name IN (?) ORDER BY name", bun.In(replacedMigrations)).Scan(ctx, &replaced)
+			err := tx.NewRaw("SELECT name FROM bun_migrations WHERE name IN (?) ORDER BY name", bun.List(replacedMigrations)).Scan(ctx, &replaced)
 			if err != nil {
 				return errors.WithStack(err)
 			}

@@ -95,31 +95,29 @@ const contentStart = target => {
 // a replaced element. An element that isn't drawn (display: none) is
 // passed over. Later breaks stay.
 const BREAKS_BEFORE = ['break-before', 'page-break-before', '-webkit-column-break-before']
-const hasContent = node => node.nodeType === 3
-    ? node.textContent.trim() !== ''
-    : node.nodeType === 1 && (node.matches(REPLACED)
-        || node.textContent.trim() !== '' || node.querySelector(REPLACED) !== null)
 export const clearLeadingBreaks = doc => {
-    const hidden = el => el.hidden || el.style.display === 'none'
-        || doc.defaultView?.getComputedStyle(el).display === 'none'
-    let parent = doc.body
-    while (parent) {
-        let next = null
+    // The computed style where there is one, as in the reader's frames, so
+    // a stylesheet's display wins over an inline one as it does on screen.
+    const hidden = el => {
+        const style = doc.defaultView?.getComputedStyle(el)
+        return style ? style.display === 'none' : el.hidden || el.style.display === 'none'
+    }
+    // Clears breaks down through parent's leading elements, and whether it
+    // reached drawn content, which ends the walk. A subtree with nothing
+    // drawn, such as a wrapper of hidden text, is walked past.
+    const clear = parent => {
         for (const node of parent.childNodes) {
             if (node.nodeType === 3) {
-                if (hasContent(node)) return
+                if (node.textContent.trim() !== '') return true
                 continue
             }
             if (node.nodeType !== 1 || hidden(node)) continue
             for (const name of BREAKS_BEFORE) node.style.setProperty(name, 'auto', 'important')
-            if (node.matches(REPLACED)) return
-            if (hasContent(node)) {
-                next = node
-                break
-            }
+            if (node.matches(REPLACED) || clear(node)) return true
         }
-        parent = next
+        return false
     }
+    clear(doc.body)
 }
 
 const makeRange = (doc, node, start, end = start) => {

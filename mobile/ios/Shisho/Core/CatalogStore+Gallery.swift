@@ -169,8 +169,11 @@ extension CatalogStore {
     /// Libraries that have it, in the order `counted` gives.
     private static func tagOptions(books: String, in db: Database) throws -> [FilterOption] {
         let namespaces = try tagNamespacesByLibrary(db)
-        var options: [String: FilterOption] = [:]
-        var order: [String] = []
+        // Keyed by the bytes SQLite's NOCASE compares, not Swift's String
+        // equality, which takes composed and decomposed letters as one where
+        // SQLite, and so the filter, keeps them apart.
+        var options: [Data: FilterOption] = [:]
+        var order: [Data] = []
         for row in try Row.fetchAll(db, sql: """
             SELECT t.name, b.library_id, COUNT(DISTINCT t.book_id) AS count
             FROM book_tags t JOIN books b ON b.id = t.book_id WHERE t.book_id IN (\(books))
@@ -178,7 +181,7 @@ extension CatalogStore {
             """) {
             let name: String = row["name"]
             let split = TagNamespaces.split(name, namespaces[row["library_id"]] ?? [])
-            let key = nocase(name)
+            let key = Data(nocase(name).utf8)
             guard var option = options[key] else {
                 order.append(key)
                 options[key] = FilterOption(name: name, count: row["count"], namespaces: [split.namespace],
@@ -186,8 +189,10 @@ extension CatalogStore {
                 continue
             }
             // Each Book is in one Library, so the counts add up.
+            // A namespace one Library spells in other letters is the same.
+            let known = option.namespaces.contains { $0.map(nocase) == split.namespace.map(nocase) }
             option = FilterOption(name: option.name, count: option.count + (row["count"] as Int),
-                                  namespaces: option.namespaces.contains(split.namespace) ? option.namespaces : option.namespaces + [split.namespace],
+                                  namespaces: known ? option.namespaces : option.namespaces + [split.namespace],
                                   shownName: option.shownName ?? (split.namespace == nil ? nil : split.name))
             options[key] = option
         }

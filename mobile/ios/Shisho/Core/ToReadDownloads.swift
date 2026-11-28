@@ -23,4 +23,11 @@ enum ToReadDownloads {
         // it comes back.
         return Plan(download: top.filter { !handled.contains($0) }, handled: Set(top))
     }
+
+    /// The Books to remember after a plan's downloads were queued, or
+    /// couldn't be: then only those remembered before and still in the top,
+    /// so the rest are tried again.
+    static func remembered(previous: Set<Int>, plan: Plan, queued: Bool) -> Set<Int> {
+        queued ? plan.handled : previous.intersection(plan.handled)
+    }
 }

@@ -2056,12 +2056,12 @@
         }
       }
     },
-    "The server at %@ was set up again, so this device was signed out of %@ there. Signing in again starts fresh on it, and removes this account's library and the changes this device hadn't sent." : {
+    "The server at %@ was set up again, so this device was signed out of %@ there. Sign in again to start fresh on it. Changes this device hadn't sent were for the earlier server, so none go to this one." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "The server at %1$@ was set up again, so this device was signed out of %2$@ there. Signing in again starts fresh on it, and removes this account's library and the changes this device hadn't sent."
+            "value" : "The server at %1$@ was set up again, so this device was signed out of %2$@ there. Sign in again to start fresh on it. Changes this device hadn't sent were for the earlier server, so none go to this one."
           }
         }
       }

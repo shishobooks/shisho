@@ -184,6 +184,16 @@ extension DownloadStoreTests {
 }
 
 final class DownloadRulesTests: XCTestCase {
+    /// The reader waits for a Download already transferring rather than
+    /// start a second, but not one that can't move now, as one waiting for
+    /// Wi-Fi: the reader downloads on any network.
+    func testTheReaderJoinsOnlyATransferThatCanMove() {
+        XCTAssertTrue(DownloadRules.joinsTransfer(running: true, wait: nil))
+        XCTAssertFalse(DownloadRules.joinsTransfer(running: true, wait: .wifi))
+        XCTAssertFalse(DownloadRules.joinsTransfer(running: true, wait: .connection))
+        XCTAssertFalse(DownloadRules.joinsTransfer(running: false, wait: nil))
+    }
+
     func testWiFiOnlyWaitsOffWiFi() {
         XCTAssertNil(DownloadRules.wait(wifiOnly: false, network: .cellular))
         XCTAssertNil(DownloadRules.wait(wifiOnly: true, network: .wifi))

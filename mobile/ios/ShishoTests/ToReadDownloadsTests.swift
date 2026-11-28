@@ -55,4 +55,12 @@ final class ToReadDownloadsTests: XCTestCase {
         XCTAssertEqual(plan.download, [])
         XCTAssertEqual(plan.handled, [5])
     }
+
+    func testBooksAreRememberedOnlyOnceQueued() {
+        let plan = ToReadDownloads.plan(toRead: [9, 5, 3], count: 2, handled: [5, 3])
+        XCTAssertEqual(ToReadDownloads.remembered(previous: [5, 3], plan: plan, queued: true), [9, 5])
+        // The queue write failed: 9 isn't remembered, so it's tried again,
+        // and 3, out of the top now, is still forgotten.
+        XCTAssertEqual(ToReadDownloads.remembered(previous: [5, 3], plan: plan, queued: false), [5])
+    }
 }

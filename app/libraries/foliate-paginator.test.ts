@@ -60,6 +60,16 @@ describe("the paginator's leading-break patch", () => {
     expect(breakBefore(doc.querySelector(".head"))).toBe("auto");
   });
 
+  it("walks on past a wrapper whose only text isn't drawn", () => {
+    const doc = new DOMParser().parseFromString(
+      `<html><body><div class="wrap"><span hidden>page 8</span></div>
+        <h2 class="head" style="break-before: page">Two</h2></body></html>`,
+      "text/html",
+    );
+    clearLeadingBreaks(doc);
+    expect(breakBefore(doc.querySelector(".head"))).toBe("auto");
+  });
+
   it("leaves a break after content alone", () => {
     const doc = new DOMParser().parseFromString(
       `<html><body>Intro<div class="chapter" style="break-before: page">Two</div></body></html>`,

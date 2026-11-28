@@ -35,6 +35,13 @@ enum DownloadRules {
         case turn
     }
 
+    /// Whether the reader waits for a File's transfer in the background
+    /// rather than download it itself: only one that can move now, since
+    /// the reader downloads on any network, Wi-Fi only or not.
+    static func joinsTransfer(running: Bool, wait: Wait?) -> Bool {
+        running && wait == nil
+    }
+
     /// Why queued Downloads can't transfer now, or nil when they can.
     static func wait(wifiOnly: Bool, network: DownloadNetwork) -> Wait? {
         switch network {
@@ -376,7 +383,8 @@ final class DownloadManager {
     /// is waited for rather than started over.
     func fetchNow(fileID: Int, reporting report: (@Sendable (Double) -> Void)? = nil) async throws -> (url: URL, fetched: UUID?) {
         if let local = localFile(fileID: fileID) { return (local, nil) }
-        if running.contains(fileID), let url = try await awaitTransfer(fileID: fileID, reporting: report) {
+        if DownloadRules.joinsTransfer(running: running.contains(fileID), wait: wait),
+           let url = try await awaitTransfer(fileID: fileID, reporting: report) {
             return (url, nil)
         }
         let downloaded: URL
@@ -419,7 +427,8 @@ final class DownloadManager {
         log("file \(fileID): already downloading, so the reader waits for it")
         while true {
             if let local = localFile(fileID: fileID) { return local }
-            guard running.contains(fileID) else { return nil }
+            // Stopped, or the network changed so it can't move now.
+            guard DownloadRules.joinsTransfer(running: running.contains(fileID), wait: wait) else { return nil }
             if let fraction = progress[fileID] { report?(fraction) }
             try await Task.sleep(for: .milliseconds(250))
         }
@@ -558,8 +567,9 @@ final class DownloadManager {
         }
         // Remembered only once queued, so Books that couldn't be are tried
         // again the next time To Read changes, or at the next launch.
-        if !fileIDs.isEmpty, !download(fileIDs) { return }
-        UserDefaults.standard.set(Array(plan.handled.subtracting(waiting)).sorted(), forKey: key)
+        let queued = fileIDs.isEmpty || download(fileIDs)
+        let remembered = ToReadDownloads.remembered(previous: handled, plan: plan, queued: queued)
+        UserDefaults.standard.set(Array(remembered.subtracting(waiting)).sorted(), forKey: key)
     }
 
     /// A File was listened to or read to its end, which finishes its

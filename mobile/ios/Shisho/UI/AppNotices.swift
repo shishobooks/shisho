@@ -52,7 +52,7 @@ struct EndedSignInBanner: View {
     private var text: String {
         let host = account.serverURL.host() ?? account.serverURL.absoluteString
         return serverReplaced
-            ? String(localized: "The server at \(host) was set up again, so this device was signed out of \(account.username) there. Signing in again starts fresh on it, and removes this account's library and the changes this device hadn't sent.")
+            ? String(localized: "The server at \(host) was set up again, so this device was signed out of \(account.username) there. Sign in again to start fresh on it. Changes this device hadn't sent were for the earlier server, so none go to this one.")
             : String(localized: "This device was signed out of \(account.username) on \(host). Its library is still on this device; sign in again to keep syncing it.")
     }
 
