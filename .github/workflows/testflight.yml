@@ -1,0 +1,100 @@
+name: TestFlight
+
+# Uploads a build of the iOS app to TestFlight when master has changed the
+# app since the last upload (scripts/testflight-changes.sh decides), and on
+# a manual run. App Store Connect hands each processed build to the
+# internal testing group, which needs no Beta App Review.
+# docs/agents/releases.md covers it.
+#
+# Only master's pushes and manual runs on master, never pull requests or
+# other branches: the job holds the App Store Connect API key, and what it
+# uploads goes straight to the testers' phones. Forks have no secrets, so it
+# skips them too.
+#
+# The run number is the build number, so keep this file's name: a renamed
+# workflow counts from 1 again, below the builds already uploaded.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# One run at a time, in the order they started, so build numbers reach App
+# Store Connect rising. A run waiting behind another is replaced by a newer
+# one, which needs no record of it: each run compares master with the last
+# successful run's commit, so a replaced, cancelled, or failed run's change
+# goes out with the next run.
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: iOS app changes
+    if: github.repository == 'shishobooks/shisho' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: go
+      - id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow testflight.yml --branch master \
+            --status success --limit 1 --json headSha,number --jq '.[0] // empty | "\(.number) \(.headSha)"')
+          if [ -z "$last" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          read -r number sha <<<"$last"
+          # A rerun of an older run: a newer one has already covered it.
+          if [ "$number" -gt "$GITHUB_RUN_NUMBER" ]; then
+            echo "Run $number, newer than this one, already covered this commit." >> "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(scripts/testflight-changes.sh "$sha")
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+  upload:
+    name: Upload to TestFlight
+    needs: changes
+    if: needs.changes.outputs.changed == 'true'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      # A rerun keeps the run number, which App Store Connect refuses once
+      # the first attempt has uploaded; a new run gets a new number.
+      - name: Archive
+        run: mise ios:archive --build-number "$GITHUB_RUN_NUMBER"
+      - name: Sign and upload
+        env:
+          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          export APP_STORE_CONNECT_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$APP_STORE_CONNECT_KEY" > "$APP_STORE_CONNECT_KEY_PATH"
+          mise ios:upload
+      - name: Summarize
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' mobile/ios/build/Shisho.xcarchive/Products/Applications/Shisho.app/Info.plist)
+          echo "Uploaded Shisho $version ($GITHUB_RUN_NUMBER) to App Store Connect. TestFlight offers it to the internal testers once Apple has processed it." >> "$GITHUB_STEP_SUMMARY"
