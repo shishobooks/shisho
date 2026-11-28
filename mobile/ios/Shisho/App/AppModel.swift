@@ -560,7 +560,9 @@ final class AppModel {
     }
 
     /// The account's server lists capability, by the name the server
-    /// lists it under.
+    /// lists it under. Nothing calls it yet: the first capability added after
+    /// protocol 1's baseline will, to hide its feature on a server that
+    /// doesn't list it.
     func offers(_ capability: String) -> Bool {
         capabilities.contains(capability)
     }

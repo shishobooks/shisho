@@ -515,13 +515,29 @@ private struct NamePicker: View {
     @State private var query = ""
     @State private var scope: TagScope = .all
 
-    private func split(_ name: String) -> SplitTag { TagNamespaces.split(name, namespaces) }
-
     private var shown: [FilterOption] {
         let query = query.trimmingCharacters(in: .whitespaces)
         return options.filter { option in
-            TagScopeTabs.contains(scope, namespace: split(option.name).namespace)
-                && (query.isEmpty || option.name.localizedStandardContains(query) || split(option.name).name.localizedStandardContains(query))
+            option.namespaces.contains { scope.contains(namespace: $0) }
+                && (query.isEmpty || option.name.localizedStandardContains(query)
+                    || (option.shownName?.localizedStandardContains(query) ?? false))
+        }
+    }
+
+    /// The namespace to name over an option, under All: the one it's in in
+    /// every Library that has it.
+    private func namespace(_ option: FilterOption) -> String? {
+        guard scope == .all, option.namespaces.count == 1 else { return nil }
+        return option.namespaces[0]
+    }
+
+    /// The name to show: without the prefix where the list shows its
+    /// namespace, as a namespace's own scope and its label under All do.
+    private func label(_ option: FilterOption) -> String {
+        switch scope {
+        case .namespace: option.shownName ?? option.name
+        case .all: namespace(option) == nil ? option.name : option.shownName ?? option.name
+        case .plain: option.name
         }
     }
 
@@ -558,15 +574,14 @@ private struct NamePicker: View {
                 HStack(spacing: 12) {
                     Icon(on ? .squareCheck : .square, size: 20)
                         .foregroundStyle(on ? Theme.primary : Theme.mutedForeground)
-                    let split = split(option.name)
                     VStack(alignment: .leading, spacing: 1) {
                         // Under All, a namespaced tag names its namespace.
-                        if scope == .all, let namespace = split.namespace {
+                        if let namespace = namespace(option) {
                             Text(namespace)
                                 .font(.geist(.caption2, weight: .semibold))
                                 .foregroundStyle(Theme.mutedForeground)
                         }
-                        Text(split.name)
+                        Text(label(option))
                             .font(.geist(.body))
                             .foregroundStyle(Theme.foreground)
                     }

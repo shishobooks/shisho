@@ -347,16 +347,20 @@ final class DownloadManager {
 
     // MARK: - Asking
 
-    /// Downloads fileIDs, skipping any already downloaded or on their way.
-    func download(_ fileIDs: [Int]) {
+    /// Downloads fileIDs, skipping any already downloaded or on their way,
+    /// and whether they could be queued.
+    @discardableResult
+    func download(_ fileIDs: [Int]) -> Bool {
+        defer { pump() }
         do {
             let queued = try store.queueDownloads(fileIDs)
             for fileID in queued { failures[fileID] = nil }
             if !queued.isEmpty { log("queued \(queued.map { "file \($0)" }.joined(separator: ", "))") }
+            return true
         } catch {
             log("couldn't queue \(fileIDs): \(Diagnostics.describe(error))")
+            return false
         }
-        pump()
     }
 
     /// Downloads a File now, in front of the user, as opening an ebook that
@@ -367,9 +371,14 @@ final class DownloadManager {
     /// call put there, which only it may discard (`discard`), or nil for one
     /// it found on the device. report hears how far it has got, from 0
     /// to 1, for the screen waiting on it. Cancelled, as when the reader
-    /// closes first, the File is queued as a Download instead.
+    /// closes first, the File is queued as a Download instead. One already
+    /// transferring in the background, as after the reader closed partway,
+    /// is waited for rather than started over.
     func fetchNow(fileID: Int, reporting report: (@Sendable (Double) -> Void)? = nil) async throws -> (url: URL, fetched: UUID?) {
         if let local = localFile(fileID: fileID) { return (local, nil) }
+        if running.contains(fileID), let url = try await awaitTransfer(fileID: fileID, reporting: report) {
+            return (url, nil)
+        }
         let downloaded: URL
         do {
             downloaded = try await client.download(fileID: fileID, progress: report)
@@ -400,6 +409,19 @@ final class DownloadManager {
             log("file \(fileID): downloaded to open it")
             onChange?(fileID)
             return (url, copy)
+        }
+    }
+
+    /// Waits for a background transfer of fileID, reporting how far it has
+    /// got, and returns its Download once it's on the device, or nil when it
+    /// stopped without one, to fetch it here. Cancelling leaves it going.
+    private func awaitTransfer(fileID: Int, reporting report: (@Sendable (Double) -> Void)?) async throws -> URL? {
+        log("file \(fileID): already downloading, so the reader waits for it")
+        while true {
+            if let local = localFile(fileID: fileID) { return local }
+            guard running.contains(fileID) else { return nil }
+            if let fraction = progress[fileID] { report?(fraction) }
+            try await Task.sleep(for: .milliseconds(250))
         }
     }
 
@@ -534,8 +556,10 @@ final class DownloadManager {
         if !wanted.isEmpty {
             log("the top of To Read: \(wanted.map { "book \($0)" }.joined(separator: ", "))")
         }
+        // Remembered only once queued, so Books that couldn't be are tried
+        // again the next time To Read changes, or at the next launch.
+        if !fileIDs.isEmpty, !download(fileIDs) { return }
         UserDefaults.standard.set(Array(plan.handled.subtracting(waiting)).sorted(), forKey: key)
-        if !fileIDs.isEmpty { download(fileIDs) }
     }
 
     /// A File was listened to or read to its end, which finishes its

@@ -516,17 +516,14 @@ const (
 	//tygo:emit export type JournalEventType = typeof JournalEventReadingPosition | typeof JournalEventReadingSession | typeof JournalEventBookmarkCreate | typeof JournalEventBookmarkNote | typeof JournalEventBookmarkDelete | typeof JournalEventPageFlow | typeof JournalEventReadThroughStart | typeof JournalEventReadThroughFinish | typeof JournalEventReadThroughAbandon | typeof JournalEventReadThroughPause | typeof JournalEventReadThroughResume | typeof JournalEventReadThroughDelete | typeof JournalEventReferenceMark | typeof JournalEventReferenceRemove | typeof JournalEventRatingSet | typeof JournalEventRatingClear | typeof JournalEventToReadAdd | typeof JournalEventToReadRemove | typeof JournalEventToReadMove | typeof JournalEventListCreate | typeof JournalEventListRename | typeof JournalEventListDelete | typeof JournalEventListAdd | typeof JournalEventListRemove | typeof JournalEventListMove | typeof JournalEventPositionClear;
 	JournalEventReadingPosition = "reading_position"
 	JournalEventReadingSession  = "reading_session"
-	// The Bookmark events, sent only to a server that lists
-	// CapabilityBookmarks.
+	// The Bookmark events.
 	JournalEventBookmarkCreate = "bookmark_create"
 	JournalEventBookmarkNote   = "bookmark_note"
 	JournalEventBookmarkDelete = "bookmark_delete"
-	// The Page flow event, sent only to a server that lists
-	// CapabilityPageFlow.
+	// The Page flow event.
 	JournalEventPageFlow = "page_flow"
-	// The Read-through and Reference events, sent only to a server that
-	// lists CapabilityReadingStatus. Each does what the web's status menu
-	// does, at the event's time (ADR 0028 orders them).
+	// The Read-through and Reference events. Each does what the web's
+	// status menu does, at the event's time (ADR 0028 orders them).
 	JournalEventReadThroughStart   = "read_through_start"
 	JournalEventReadThroughFinish  = "read_through_finish"
 	JournalEventReadThroughAbandon = "read_through_abandon"
@@ -535,22 +532,21 @@ const (
 	JournalEventReadThroughDelete  = "read_through_delete"
 	JournalEventReferenceMark      = "reference_mark"
 	JournalEventReferenceRemove    = "reference_remove"
-	// The Rating events, sent only to a server that lists CapabilityRatings.
+	// The Rating events.
 	JournalEventRatingSet   = "rating_set"
 	JournalEventRatingClear = "rating_clear"
-	// The To Read events, sent only to a server that lists CapabilityToRead.
+	// The To Read events.
 	JournalEventToReadAdd    = "to_read_add"
 	JournalEventToReadRemove = "to_read_remove"
 	JournalEventToReadMove   = "to_read_move"
-	// The List events, sent only to a server that lists CapabilityLists.
+	// The List events.
 	JournalEventListCreate = "list_create"
 	JournalEventListRename = "list_rename"
 	JournalEventListDelete = "list_delete"
 	JournalEventListAdd    = "list_add"
 	JournalEventListRemove = "list_remove"
 	JournalEventListMove   = "list_move"
-	// The event that clears a File's saved place, sent only to a server
-	// that lists CapabilityClearPosition.
+	// The event that clears a File's saved place.
 	JournalEventPositionClear = "position_clear"
 )
 
@@ -830,7 +826,7 @@ type StatsHeatmapQuery struct {
 // StatsHeatmapResponse is the user's reading a day at a time, for the
 // heatmap on Reading Stats' Calendar tab, as the web's. Days are in the
 // user's time zone, a Session past midnight split between both. The app
-// keeps a copy of each it shows (CapabilityReadingCalendar).
+// keeps a copy of each it shows.
 type StatsHeatmapResponse struct {
 	// Today is the user's today.
 	Today string `json:"today"`

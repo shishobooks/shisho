@@ -123,8 +123,8 @@ func (s *server) processEnv() []string {
 }
 
 // acceptAppProtocols restarts the server accepting only the Shisho app
-// protocols in protocols, "MIN-MAX" as SHISHO_DEV_APP_PROTOCOLS takes it,
-// or its own range when protocols is empty, on the same address and data.
+// protocols in protocols, "MIN-MAX" as SHISHO_DEV_APP_PROTOCOLS takes it, on
+// the same address and data.
 // A server that was offline comes back.
 func (s *server) acceptAppProtocols(ctx context.Context, protocols string) error {
 	s.swap.Lock()

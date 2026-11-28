@@ -47,10 +47,14 @@ final class TagNamespacesTests: XCTestCase {
         XCTAssertEqual(TagNamespaces.merged([["Circle", "Source"], ["source", "Magazine"], []]), ["Circle", "Source", "Magazine"])
     }
 
-    func testAScopeKeepsItsTagsAndShowsThemWithoutThePrefix() {
-        let tags = ["Circle: Moon Factory", "Full Color", "Magazine: Comic Bloom"]
-        XCTAssertEqual(TagNamespaces.filter(tags, scope: .all, namespaces: namespaces), tags)
-        XCTAssertEqual(TagNamespaces.filter(tags, scope: .plain, namespaces: namespaces), ["Full Color"])
-        XCTAssertEqual(TagNamespaces.filter(tags, scope: .namespace("Circle"), namespaces: namespaces), ["Circle: Moon Factory"])
+    func testAScopeHoldsTheTagsInIt() {
+        XCTAssertTrue(TagScope.all.contains(namespace: nil))
+        XCTAssertTrue(TagScope.all.contains(namespace: "Circle"))
+        XCTAssertTrue(TagScope.plain.contains(namespace: nil))
+        XCTAssertFalse(TagScope.plain.contains(namespace: "Circle"))
+        XCTAssertTrue(TagScope.namespace("Circle").contains(namespace: "Circle"))
+        XCTAssertTrue(TagScope.namespace("Circle").contains(namespace: "circle"), "as the server compares namespaces")
+        XCTAssertFalse(TagScope.namespace("Circle").contains(namespace: nil))
+        XCTAssertFalse(TagScope.namespace("Circle").contains(namespace: "Magazine"))
     }
 }

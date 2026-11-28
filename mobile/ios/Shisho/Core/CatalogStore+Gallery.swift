@@ -28,6 +28,12 @@ struct LibraryFilter: Hashable, Sendable {
 struct FilterOption: Hashable, Sendable, Identifiable {
     let name: String
     let count: Int
+    /// A tag's namespaces in the Libraries that have it, nil for none, as
+    /// each Library splits it (`TagNamespaces`): one name can be namespaced
+    /// in one Library and plain in another.
+    var namespaces: [String?] = [nil]
+    /// The name without its prefix, where some Library namespaces it.
+    var shownName: String?
     var id: String { name }
 }
 
@@ -126,7 +132,7 @@ extension CatalogStore {
         return FilterOptions(
             fileTypes: try String.fetchAll(db, sql: "SELECT DISTINCT file_type FROM book_files WHERE book_id IN (\(books)) ORDER BY file_type"),
             genres: try counted("book_genres", books: books, in: db),
-            tags: try counted("book_tags", books: books, in: db),
+            tags: try tagOptions(books: books, in: db),
             languages: languageOptions(try String.fetchAll(db, sql: """
                 SELECT DISTINCT language FROM book_files WHERE language IS NOT NULL AND book_id IN (\(books)) ORDER BY language
                 """)),
@@ -159,6 +165,37 @@ extension CatalogStore {
 
     /// The names in a Book join table with how many Books have each, most
     /// first, as the web's pickers list them.
+    /// The tags the Books have, each split by the namespaces of the
+    /// Libraries that have it, in the order `counted` gives.
+    private static func tagOptions(books: String, in db: Database) throws -> [FilterOption] {
+        let namespaces = try tagNamespacesByLibrary(db)
+        var options: [String: FilterOption] = [:]
+        var order: [String] = []
+        for row in try Row.fetchAll(db, sql: """
+            SELECT t.name, b.library_id, COUNT(DISTINCT t.book_id) AS count
+            FROM book_tags t JOIN books b ON b.id = t.book_id WHERE t.book_id IN (\(books))
+            GROUP BY t.name COLLATE NOCASE, b.library_id ORDER BY t.name COLLATE NOCASE, b.library_id
+            """) {
+            let name: String = row["name"]
+            let split = TagNamespaces.split(name, namespaces[row["library_id"]] ?? [])
+            let key = nocase(name)
+            guard var option = options[key] else {
+                order.append(key)
+                options[key] = FilterOption(name: name, count: row["count"], namespaces: [split.namespace],
+                                            shownName: split.namespace == nil ? nil : split.name)
+                continue
+            }
+            // Each Book is in one Library, so the counts add up.
+            option = FilterOption(name: option.name, count: option.count + (row["count"] as Int),
+                                  namespaces: option.namespaces.contains(split.namespace) ? option.namespaces : option.namespaces + [split.namespace],
+                                  shownName: option.shownName ?? (split.namespace == nil ? nil : split.name))
+            options[key] = option
+        }
+        return order.compactMap { options[$0] }.sorted {
+            $0.count != $1.count ? $0.count > $1.count : nocase($0.name) < nocase($1.name)
+        }
+    }
+
     private static func counted(_ table: String, books: String, in db: Database) throws -> [FilterOption] {
         try Row.fetchAll(db, sql: """
             SELECT name, COUNT(DISTINCT book_id) AS count FROM \(table) WHERE book_id IN (\(books))

@@ -86,8 +86,6 @@ When the phone and the web change the same thing while the phone is offline, the
 - **To Read and ordered lists**: the latest move of each book wins. Books moved only on one side keep that side's move.
 - **Reading status**: the later choice wins. A status chosen on the phone before a later choice on the web doesn't apply when it syncs. A book marked read or Did Not Finish offline before you marked it Reference elsewhere is still recorded in Reading History, and the book stays Reference.
 
-A server from before these features doesn't offer them: the app shows your status and rating there without the controls to change them, and the **Reading Stats** link is hidden. With a server whose Reading Stats predate the calendar, the app shows them without the **Calendar** tab.
-
 ## Accounts
 
 The app can be signed in to several servers, or several accounts on one server, at once. **Account > Add Server** signs in to another server, or as someone else on the same one, and tapping an account in that list switches to it. Each account keeps its own copy of its libraries, so switching shows it at once, even offline. Signing out of one account switches to another that's still signed in.
@@ -123,6 +121,8 @@ CarPlay doesn't need the app open on the phone, and it works offline for downloa
 ## Reading
 
 Books with an EPUB, KePub, MOBI, AZW3, CBZ, or PDF file have a **Read** button, which shows an ebook's [word count](./supported-formats.md#word-count) or a comic's or PDF's page count, and the file's size, before you start, and once you've started, the chapter you're in and the pages left in the book. Each of those files has a read button in the book's list of files; **Read** opens the one you read last. The reader needs the whole book before it can show a page, so opening a book that isn't on the phone [downloads](#downloads) it. It stays on the phone, and opens without a connection, until you remove it.
+
+A book that isn't downloaded downloads when you open it, since the reader needs the whole book to show a page, and the reader shows how far that download has got. If you close the reader before the book arrives, it keeps downloading in **Downloads**, where **Download on Wi-Fi only** applies again.
 
 A tap on the left or right third of the page turns it, and a tap in the middle shows or hides the controls. A tap on a link follows it, and in the middle of the page so does a tap near one; a tap near a footnote reference opens it anywhere on the page. A tap on a picture in the middle of the page opens it on its own: pinch or double-tap to zoom, and drag down to close it. A footnote opens in a card beside its reference, with **Go to Note** to read it in place. Press and hold to select text and use **Copy**, **Look Up**, and the rest of the system's menu; while text is selected, dragging moves the selection instead of turning the page.
 
@@ -171,7 +171,7 @@ The **Downloads** tab lists what's downloaded and what's on its way, with the sp
 
 These settings in **Download Settings**, the gear at the top of the **Downloads** tab, apply to every account on the phone, and each starts off:
 
-- **Download on Wi-Fi only**: downloads wait while the phone is on cellular or a network iOS treats as limited, such as a personal hotspot, and carry on from where they stopped once it's on Wi-Fi. A book you open in the reader still downloads on any network, since the reader needs the whole book to show a page, just as an audiobook streams on any network. The reader shows how far that download has got while it opens. If you close the reader before the book arrives, it keeps downloading in **Downloads**, where **Download on Wi-Fi only** applies again.
+- **Download on Wi-Fi only**: downloads wait while the phone is on cellular or a network iOS treats as limited, such as a personal hotspot, and carry on from where they stopped once it's on Wi-Fi. A book you open in the reader still downloads on any network, since the reader needs the whole book to show a page, just as an audiobook streams on any network.
 - **Remove when finished**: a download is removed once you listen to or read it to the end. A book in the reader is removed when you close it, unless you went back from the end. Supplements are never removed this way.
 - **Download the top of To Read**: the first books on your [To Read](#your-reading-record) list download by themselves, with all of their files, so the next ones are ready offline. Choose how many, from 1 to 20. A book downloads when it moves into that many, wherever you change the order, and **Download on Wi-Fi only** still applies. Nothing is removed when a book moves down the list. If you remove a book's download, it isn't downloaded again while it stays in that many; once it moves down and back up, it downloads again.
 

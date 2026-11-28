@@ -73,7 +73,7 @@ struct ResourceListView: View {
     }
 
     private var shown: [ResourceSummary] {
-        let inScope = matching.filter { TagScopeTabs.contains(scope, namespace: $0.namespace) }
+        let inScope = matching.filter { scope.contains(namespace: $0.namespace) }
         // A namespace's tags sort by their names without the prefix.
         guard case .namespace = scope else { return inScope }
         return inScope.sorted { $0.shownName.localizedStandardCompare($1.shownName) == .orderedAscending }
@@ -90,7 +90,7 @@ struct ResourceListView: View {
         return ([TagScope.plain] + (namespaces ?? []).map(TagScope.namespace)).map { scope in
             let label = if case .namespace(let name) = scope { name } else { String(localized: "Tags") }
             return TagScopeTabs.Tab(scope: scope, label: label,
-                                    count: matching.filter { TagScopeTabs.contains(scope, namespace: $0.namespace) }.count)
+                                    count: matching.filter { scope.contains(namespace: $0.namespace) }.count)
         }
     }
 
@@ -394,16 +394,6 @@ struct TagScopeTabs: View {
         case .all: "tags.scope.all"
         case .plain: "tags.scope.plain"
         case .namespace(let namespace): "tags.scope.\(namespace)"
-        }
-    }
-
-    /// Whether item is in scope, its namespace compared as the server
-    /// compares namespaces, ignoring the case of ASCII letters.
-    static func contains(_ scope: TagScope, namespace: String?) -> Bool {
-        switch scope {
-        case .all: true
-        case .plain: namespace == nil
-        case .namespace(let wanted): namespace.map { CatalogStore.nocase($0) == CatalogStore.nocase(wanted) } ?? false
         }
     }
 }

@@ -141,8 +141,6 @@ final class SyncEngine: Sendable {
         if current { try store.calendarRefreshed(before: began) }
     }
 
-    /// Sends the journal in batches until nothing sendable is left. Any
-    /// failure keeps the whole batch, to send again.
     /// Sends the journal now, as signing out does, asking the server first
     /// when it was last heard not to answer: it may be back with nothing
     /// having noticed yet, and requests fail at once until something asks.
@@ -153,6 +151,8 @@ final class SyncEngine: Sendable {
         try await sendJournal()
     }
 
+    /// Sends the journal in batches until nothing sendable is left. Any
+    /// failure keeps the whole batch, to send again.
     func sendJournal() async throws {
         // Each round takes at least one event off the sendable list, so this
         // ends; the cap only guards against a server that answers oddly.

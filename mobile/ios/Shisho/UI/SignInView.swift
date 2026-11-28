@@ -125,7 +125,10 @@ struct SignInView: View {
                     }
 
                     if !addingAccount {
+                        // Not while a sign-in is under way, whose answer
+                        // would open its account over the one picked.
                         OtherAccounts()
+                            .disabled(busy)
                     }
                 }
                 .padding(.horizontal, 24)

@@ -77,7 +77,6 @@ const (
 	reasonPrimaryKey = "the primary key, which a row never changes"
 	reasonBookkeep   = "bookkeeping the app doesn't show"
 	reasonSource     = "provenance, which the app doesn't show"
-	reasonNotYet     = "not in the app's documents yet"
 	// reasonDeviceOnlyName: a Reading Position carries only its Device's name.
 	reasonDeviceOnlyName = "a Reading Position carries only its Device's name"
 	reasonLibrary        = "the Library is read from the Book"

@@ -94,8 +94,7 @@ extension CatalogStore {
         try db.create(table: "chosen_page_flows") { t in
             t.primaryKey("book_id", .integer)
             t.column("page_flow", .text).notNull()
-            // The journal event sending it, or nil for a choice kept on
-            // the device because the server can't take it.
+            // The journal event sending it.
             t.column("event_id", .text)
             // The server took it in: it goes once the feed brings the
             // Book's record back, so the choice never flickers back to

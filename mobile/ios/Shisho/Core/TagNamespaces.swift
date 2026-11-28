@@ -14,6 +14,17 @@ enum TagScope: Hashable, Sendable {
     case all
     case plain
     case namespace(String)
+
+    /// Whether a tag in namespace, or in none for nil, is in the scope. A
+    /// namespace compares as the server compares them, ignoring the case of
+    /// ASCII letters.
+    func contains(namespace: String?) -> Bool {
+        switch self {
+        case .all: true
+        case .plain: namespace == nil
+        case .namespace(let wanted): namespace.map { CatalogStore.nocase($0) == CatalogStore.nocase(wanted) } ?? false
+        }
+    }
 }
 
 /// Tag namespaces, as the web shows them (metadata.md, Tag Namespaces): a
@@ -27,9 +38,9 @@ enum TagScope: Hashable, Sendable {
 /// three together.
 enum TagNamespaces {
     static func split(_ tag: String, _ namespaces: [String]) -> SplitTag {
-        let folded = foldASCII(tag)
+        let folded = CatalogStore.nocase(tag)
         for namespace in namespaces {
-            let prefix = foldASCII(namespace) + ":"
+            let prefix = CatalogStore.nocase(namespace) + ":"
             // Folding only ASCII letters keeps every character where it was,
             // so the prefix's length is the same in the tag.
             guard folded.hasPrefix(prefix) else { continue }
@@ -60,24 +71,9 @@ enum TagNamespaces {
     static func merged(_ lists: [[String]]) -> [String] {
         var seen: Set<String> = []
         var out: [String] = []
-        for namespace in lists.joined() where seen.insert(foldASCII(namespace)).inserted {
+        for namespace in lists.joined() where seen.insert(CatalogStore.nocase(namespace)).inserted {
             out.append(namespace)
         }
         return out
-    }
-
-    /// The tags in scope, whole.
-    static func filter(_ tags: [String], scope: TagScope, namespaces: [String]) -> [String] {
-        switch scope {
-        case .all: tags
-        case .plain: tags.filter { split($0, namespaces).namespace == nil }
-        case .namespace(let namespace): tags.filter { split($0, namespaces).namespace == namespace }
-        }
-    }
-
-    private static func foldASCII(_ string: String) -> String {
-        String(String.UnicodeScalarView(string.unicodeScalars.map { scalar in
-            ("A"..."Z").contains(scalar) ? Unicode.Scalar(scalar.value + 32)! : scalar
-        }))
     }
 }

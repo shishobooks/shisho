@@ -115,6 +115,9 @@ enum AccountColor: String, Codable, CaseIterable, Identifiable {
 @Observable
 final class AccountLooks {
     private var looks: [String: AccountLook] = [:]
+    /// Looks read from the settings, so an avatar doesn't decode one on
+    /// every render. Not observed: reading it never changes what shows.
+    @ObservationIgnored private var read: [String: AccountLook] = [:]
     @ObservationIgnored private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -123,7 +126,10 @@ final class AccountLooks {
 
     func look(for accountID: String) -> AccountLook {
         if let look = looks[accountID] { return look }
-        return Self.stored(accountID: accountID, defaults: defaults)
+        if let look = read[accountID] { return look }
+        let look = Self.stored(accountID: accountID, defaults: defaults)
+        read[accountID] = look
+        return look
     }
 
     func set(_ look: AccountLook, for accountID: String) {
@@ -259,10 +265,14 @@ struct AccountLookSheet: View {
 
     private var initialButton: some View {
         let selected = look.icon == nil
-        return choice(selected: selected) {
-            Text(String(account.username.prefix(1).uppercased()))
-                .font(.geist(size: 18, relativeTo: .body, weight: .semibold))
+        return Button { update { $0.icon = nil } } label: {
+            choiceLabel(selected: selected) {
+                Text(String(account.username.prefix(1).uppercased()))
+                    .font(.geist(size: 18, relativeTo: .body, weight: .semibold))
+                    .minimumScaleFactor(0.5)
+            }
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(Text("Initial"))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("accountLook.icon.initial")
@@ -277,13 +287,6 @@ struct AccountLookSheet: View {
         .accessibilityLabel(Text(verbatim: AccountLook.name(of: icon)))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("accountLook.icon.\(icon.rawValue)")
-    }
-
-    private func choice(selected: Bool, @ViewBuilder label: () -> some View) -> some View {
-        Button { update { $0.icon = nil } } label: {
-            choiceLabel(selected: selected, label: label)
-        }
-        .buttonStyle(.plain)
     }
 
     private func choiceLabel(selected: Bool, @ViewBuilder label: () -> some View) -> some View {

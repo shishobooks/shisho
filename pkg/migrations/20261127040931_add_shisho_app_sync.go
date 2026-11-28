@@ -414,18 +414,31 @@ func init() {
 		return nil
 	}
 
+	// changeLogExists reports whether this migration's tables are there.
+	// It's all one transaction, so they're there only when all of it ran.
+	changeLogExists := func(ctx context.Context, tx bun.Tx) (bool, error) {
+		var n int
+		err := tx.NewRaw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'change_log_entries'").Scan(ctx, &n)
+		return n > 0, errors.WithStack(err)
+	}
+
 	up := func(ctx context.Context, db *bun.DB) error {
 		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-			// Bun records a migration after it commits, so a server stopped
-			// between the two runs it again on its next start. It's all one
-			// transaction, so the change log being there means it all ran.
-			var n int
-			err := tx.NewRaw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'change_log_entries'").Scan(ctx, &n)
+			// The migrations this one replaced were never released, but a
+			// development database may have run them. It would skip itself
+			// there, keeping that database's older change log, so it stops.
+			var replaced []string
+			err := tx.NewRaw("SELECT name FROM bun_migrations WHERE name IN (?) ORDER BY name", bun.In(replacedMigrations)).Scan(ctx, &replaced)
 			if err != nil {
 				return errors.WithStack(err)
 			}
-			if n > 0 {
-				return nil
+			if len(replaced) > 0 {
+				return errors.Errorf("this database ran unreleased migrations this one replaced (%s); recreate it", strings.Join(replaced, ", "))
+			}
+			// Bun records a migration after it commits, so a server stopped
+			// between the two runs it again on its next start.
+			if exists, err := changeLogExists(ctx, tx); err != nil || exists {
+				return err
 			}
 			return run(ctx, tx, statements...)
 		})
@@ -433,6 +446,11 @@ func init() {
 
 	down := func(ctx context.Context, db *bun.DB) error {
 		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			// Bun records a rollback after it commits too, so a rollback
+			// stopped between the two runs this again.
+			if exists, err := changeLogExists(ctx, tx); err != nil || !exists {
+				return err
+			}
 			// The triggers go first: SQLite won't drop a column a trigger
 			// reads.
 			var triggers []string
@@ -465,4 +483,16 @@ func init() {
 	}
 
 	Migrations.MustRegister(up, down)
+}
+
+// replacedMigrations are the unreleased migrations this one replaced.
+var replacedMigrations = []string{
+	"20261120042255", // add_shisho_app_devices
+	"20261120042258", // create_change_log_entries
+	"20261121135507", // add_app_journal
+	"20261122033435", // add_catalog_resources_to_change_log
+	"20261123000451", // add_bookmarks_to_change_log
+	"20261123162159", // add_device_names_to_change_log
+	"20261124080000", // add_page_flow_to_change_log
+	"20261125090000", // add_journal_reading_orders
 }

@@ -265,9 +265,9 @@ final class APIClient: Sendable {
     }
 
     /// The user's reading a day at a time for year, or the last 12 months,
-    /// for Reading Stats' Calendar (CapabilityReadingCalendar). A response
-    /// without its days, from something other than Shisho, is an error, so
-    /// the copy on the device stays.
+    /// for Reading Stats' Calendar. A response without its days, from
+    /// something other than Shisho, is an error, so the copy on the device
+    /// stays.
     func statsHeatmap(year: Int?) async throws -> Shishoapp.StatsHeatmapResponse {
         let query = year.map { [URLQueryItem(name: "year", value: String($0))] } ?? []
         let body = try await data("mobile/stats/heatmap", query: query)
@@ -324,7 +324,7 @@ final class APIClient: Sendable {
     }
 
     /// A CBZ's or PDF's page, 0-based, as a thumbnail at size pixels, for
-    /// the page grid of a File that isn't downloaded (CapabilityPageImages).
+    /// the page grid of a File that isn't downloaded.
     func pageThumbnail(fileID: Int, page: Int, size: Int) async throws -> Data {
         try await data("mobile/files/\(fileID)/pages/\(page)", query: [
             URLQueryItem(name: "size", value: String(size)),

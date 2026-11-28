@@ -95,6 +95,16 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(try store.pool.read { try CatalogStore.book($0, id: 3) }?.tagNamespaces, ["Circle", "Magazine"])
         XCTAssertEqual(try store.pool.read { try CatalogStore.filterOptions($0, libraryID: 2) }.tagNamespaces, ["Circle", "Magazine"])
 
+        // The tag picker, for every Library at once, splits each tag by its
+        // own Library too.
+        let picked = try store.pool.read { try CatalogStore.filterOptions($0, libraryID: nil) }.tags
+        let byName = Dictionary(uniqueKeysWithValues: picked.map { ($0.name, $0) })
+        XCTAssertEqual(byName["Circle: Moon Factory"]?.namespaces, ["Circle"])
+        XCTAssertEqual(byName["Circle: Moon Factory"]?.shownName, "Moon Factory")
+        XCTAssertEqual(byName["Circle: Not Here"]?.namespaces, [nil], "Fiction has no Circle namespace")
+        XCTAssertNil(byName["Circle: Not Here"]?.shownName, "shown whole")
+        XCTAssertEqual(byName["Full Color"]?.namespaces, [nil])
+
         // A Library sent again with its namespaces changed.
         try store.apply(page(#"{"entries":[{"kind":"library","id":2,"library_id":2,"library":{"id":2,"name":"Doujin","cover_aspect_ratio":"book","tag_namespaces":[]}}],"cursor":10}"#))
         XCTAssertNil(try store.pool.read { try CatalogStore.resource($0, kind: .tag, id: 2) }?.namespace)
